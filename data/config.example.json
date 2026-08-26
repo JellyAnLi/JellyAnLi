@@ -1,0 +1,21 @@
+{
+  "torrent_dirs": [
+    "/torrents/Anime"
+  ],
+  "library_dir": "/media/Anime",
+  "sync_interval_minutes": 5,
+  "folder_naming_mode": "russian",
+  "proxy_url": "",
+  "use_relative_symlinks": true,
+  "use_shikimori": true,
+  "language_mapping": {
+    "ENG Sound": "en",
+    "ENG Subs": "en",
+    "Eng Dub": "en",
+    "Eng Sub": "en",
+    "RUS Sound": "ru",
+    "RUS Subs": "ru",
+    "Rus Dub": "ru",
+    "Rus Sub": "ru"
+  }
+}

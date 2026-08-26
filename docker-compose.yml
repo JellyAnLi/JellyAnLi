@@ -1,0 +1,19 @@
+services:
+  jellyanli:
+    image: ghcr.io/jellyanli/jellyanli:latest
+    container_name: jellyanli
+    ports:
+      - "37773:37773"
+    volumes:
+      # Папка для сохранения конфига (config.json) и кэша состояния (state.json)
+      - ./data:/config
+      # Папка с вашими загруженными торрентами
+      - /path/to/downloads:/torrents:ro
+      # Папка с медиатекой аниме в Jellyfin
+      - /path/to/jellyfin/anime:/media
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - PORT=37773
+      - TZ=Europe/Moscow
+    restart: unless-stopped

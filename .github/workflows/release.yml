@@ -1,0 +1,121 @@
+name: Release Multiplatform Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name (e.g. v0.2.1-beta)'
+        required: true
+        default: 'v0.2.1'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build & Release Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          check-latest: true
+
+      - name: Determine Tag & Prerelease Status
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag_name }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          if echo "$TAG" | grep -q -E "beta|alpha|rc"; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Compile and Package Binaries
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          LDFLAGS="-s -w -X main.Version=${TAG}"
+          mkdir -p release_assets
+
+          build_target() {
+            local os=$1
+            local arch=$2
+            local ext=""
+            if [ "$os" = "windows" ]; then
+              ext=".exe"
+            fi
+
+            local bin_name="jelly-an-li${ext}"
+            echo "Building binary for ${os}/${arch}..."
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -ldflags="$LDFLAGS" -o "tmp_bin/$bin_name" .
+
+            local archive_name="jelly-an-li-${TAG}-${os}-${arch}"
+            cd tmp_bin
+            if [ "$os" = "windows" ]; then
+              zip "../release_assets/${archive_name}.zip" "$bin_name"
+            else
+              tar -czvf "../release_assets/${archive_name}.tar.gz" "$bin_name"
+            fi
+            cd ..
+            rm -rf tmp_bin
+          }
+
+          mkdir -p tmp_bin
+
+          # Windows (x64 and ARM64)
+          build_target "windows" "amd64"
+          build_target "windows" "arm64"
+
+          # Linux (x64 and ARM64)
+          build_target "linux" "amd64"
+          build_target "linux" "arm64"
+
+          # macOS (Apple Silicon and Intel)
+          build_target "darwin" "arm64"
+          build_target "darwin" "amd64"
+
+          # Generate SHA256 Checksums
+          cd release_assets
+          sha256sum * > checksums.txt
+          cd ..
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Release ${{ steps.vars.outputs.tag }}
+          draft: false
+          prerelease: ${{ steps.vars.outputs.prerelease == 'true' }}
+          files: |
+            release_assets/*.zip
+            release_assets/*.tar.gz
+            release_assets/checksums.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

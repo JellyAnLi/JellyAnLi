@@ -1,0 +1,57 @@
+name: jellyanli
+services:
+  jellyanli:
+    command: null
+    container_name: jellyanli
+    deploy:
+      resources:
+        reservations:
+          memory: 64MB
+      placement: {}
+    entrypoint: null
+    environment:
+      PGID: "1000"
+      PUID: "1000"
+      PORT: "37773"
+      TZ: Europe/Moscow
+    image: ghcr.io/jellyanli/jellyanli:beta
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/jellyfin.svg
+    network_mode: bridge
+    ports:
+      - target: 37773
+        published: "37773"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /DATA/AppData/JellyAnLi/config
+        target: /config
+      - type: bind
+        source: /media/FileStorage
+        target: /media
+x-casaos:
+  app_id: jellyanli
+  architectures:
+    - amd64
+    - arm64
+  main: jellyanli
+  index: /
+  is_uncontrolled: false
+  port_map: "37773"
+  scheme: http
+  store_app_id: jellyanli
+  title:
+    custom: JellyAnLi
+    en_US: JellyAnLi
+    ru_RU: JellyAnLi
+  author: JellyAnLi
+  category: Media
+  description:
+    en_US: Jellyfin Anime Linker - utility for creating symlinks for anime torrent downloads to Jellyfin library format.
+    ru_RU: Утилита для автоматического создания символических ссылок аниме-торрентов под структуру Jellyfin.
+  tagline:
+    en_US: Jellyfin Anime Linker
+    ru_RU: Структурирование аниме-торрентов для Jellyfin
+  thumbnail: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/jellyfin.svg
+  version: 1.0.0

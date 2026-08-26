@@ -1,0 +1,52 @@
+# ==============================================================================
+# JellyAnLi - .gitignore
+# ==============================================================================
+
+# Compiled binaries and local builds
+/bin/
+/dist_release/
+/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.app
+build-errors.log
+
+# Local application runtime & persistent data (contains private paths / state)
+/data/*
+!/data/config.example.json
+internal/**/data/
+config.json
+state.json
+*_cache.json
+*.log
+
+# Frontend dependencies and distribution artifacts
+**/node_modules/
+**/dist/
+frontend/.vite/
+frontend/.vite-temp/
+frontend/package-lock.json.md5
+frontend/package.json.md5
+*.md5
+
+# Operating System metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor configurations
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+

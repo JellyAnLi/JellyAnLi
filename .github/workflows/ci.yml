@@ -1,0 +1,43 @@
+name: CI Tests & Build
+
+on:
+  push:
+    branches: [ main, master, beta, dev ]
+  pull_request:
+    branches: [ main, master, beta ]
+
+jobs:
+  test:
+    name: Run Tests & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          check-latest: true
+
+      - name: Run Go Tests
+        run: go test -v -race ./...
+
+      - name: Run Go Vet
+        run: go vet ./...
+
+      - name: Build Go Binary
+        run: go build -v -ldflags="-s -w" -o bin/jelly-an-li .
