@@ -281,6 +281,27 @@ html, body {
   height: 14px;
 }
 
+.footer-github-link.has-update {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.footer-github-link.has-update:hover {
+  color: #fde047;
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.update-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.8);
+  animation: pulse 1.5s infinite;
+}
+
 /* ===== Content Area ===== */
 .content {
   flex: 1;

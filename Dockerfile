@@ -10,6 +10,7 @@ RUN npm run build
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend-builder
 ARG TARGETOS
 ARG TARGETARCH
+ARG VERSION=v1.0.0
 WORKDIR /go/src/app
 COPY go.mod ./
 RUN go mod download
@@ -17,7 +18,7 @@ COPY . .
 # Копируем собранный фронтенд из предыдущего шага
 COPY --from=frontend-builder /app/dist ./frontend/dist
 # Компилируем оптимизированный бинарник без отладочной информации под целевую платформу
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o jelly-an-li .
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags="-s -w -X main.Version=${VERSION}" -o jelly-an-li .
 
 # --- Stage 3: Final Image ---
 FROM alpine:latest

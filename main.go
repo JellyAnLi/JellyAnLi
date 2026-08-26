@@ -15,7 +15,11 @@ import (
 	"strings"
 
 	"jelly-an-li/internal/config"
+	"jelly-an-li/internal/updater"
 )
+
+// Version приложения (проставляется автоматически при сборке через ldflags)
+var Version = "v1.0.0"
 
 //go:embed all:frontend/dist
 var assets embed.FS
@@ -193,6 +197,17 @@ func main() {
 				return
 			}
 			json.NewEncoder(w).Encode(map[string]bool{"syncing": myApp.IsSyncing()})
+		})
+
+		mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if r.Method != http.MethodGet {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			forceCheck := r.URL.Query().Get("force") == "true"
+			info := updater.CheckUpdate(Version, forceCheck)
+			json.NewEncoder(w).Encode(info)
 		})
 
 		mux.HandleFunc("/api/browse", func(w http.ResponseWriter, r *http.Request) {
