@@ -26,6 +26,7 @@ type LinkOperation struct {
 	TargetPath string     `json:"target_path"`
 	Status     LinkStatus `json:"status"`
 	Message    string     `json:"message,omitempty"`
+	NfoContent string     `json:"nfo_content,omitempty"`
 }
 
 func processShowMetadata(show *parser.AnimeShow, rawName string, cfg *config.Config) {
@@ -72,7 +73,10 @@ func processShowMetadata(show *parser.AnimeShow, rawName string, cfg *config.Con
 		}
 
 		if meta != nil {
-			if meta.TitleRu != "" {
+			if meta.ShowTitleRu != "" {
+				show.RussianName = meta.ShowTitleRu
+				fmt.Printf("[DEBUG] linker.Scan: Found Russian franchise title for '%s' -> '%s'\n", show.CleanedName, show.RussianName)
+			} else if meta.TitleRu != "" {
 				show.RussianName = meta.TitleRu
 				fmt.Printf("[DEBUG] linker.Scan: Found Russian title for '%s' -> '%s'\n", show.CleanedName, show.RussianName)
 			}
@@ -80,9 +84,16 @@ func processShowMetadata(show *parser.AnimeShow, rawName string, cfg *config.Con
 				show.RomajiName = meta.TitleRomaji
 				fmt.Printf("[DEBUG] linker.Scan: Found Romaji title for '%s' -> '%s'\n", show.CleanedName, show.RomajiName)
 			}
+			if meta.Provider == "shikimori" && meta.ID > 0 {
+				show.ShikimoriID = meta.ID
+			} else if meta.Provider == "anilist" && meta.ID > 0 {
+				show.AniListID = meta.ID
+			}
 			if meta.IsMovie {
 				show.IsMovie = true
-				fmt.Printf("[DEBUG] linker.Scan: Identified movie for '%s'\n", show.CleanedName)
+				show.MovieTitleRu = meta.TitleRu
+				show.MovieRomaji = meta.TitleRomaji
+				fmt.Printf("[DEBUG] linker.Scan: Identified movie for '%s' (title: %s)\n", show.CleanedName, show.MovieTitleRu)
 			} else if meta.IsSpecial {
 				if show.Season <= 1 && !hasExplicitSeason {
 					show.Season = 0
@@ -203,6 +214,15 @@ func sanitizeFileName(name string) string {
 	return strings.TrimSpace(strings.Join(strings.Fields(name), " "))
 }
 
+func escapeXML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "'", "&apos;")
+	return s
+}
+
 // Вспомогательная функция для нормализации строк при сравнении
 func normalizeTitle(s string) string {
 	s = strings.ToLower(s)
@@ -305,7 +325,16 @@ func resolveShowFolderName(show *parser.AnimeShow, allShows []*parser.AnimeShow,
 		fmt.Printf("[DEBUG] resolveShowFolderName: Matched show '%s' to root show '%s'\n", showName, bestMatch)
 	}
 
-	return bestMatch
+	return sanitizeFileName(bestMatch)
+}
+
+func containsCyrillic(s string) bool {
+	for _, r := range s {
+		if (r >= 'а' && r <= 'я') || (r >= 'А' && r <= 'Я') || r == 'ё' || r == 'Ё' {
+			return true
+		}
+	}
+	return false
 }
 
 // AlignShowsPartEpisodes выравнивает части/куры между всеми раздачами одного сериала и сезона
@@ -318,7 +347,7 @@ func AlignShowsPartEpisodes(shows []*parser.AnimeShow, cfg *config.Config) {
 	filesBySeason := make(map[seasonKey][]*parser.EpisodeFile)
 
 	for _, show := range shows {
-		showFolder := resolveShowFolderName(show, shows, cfg.LibraryDir, cfg.FolderNamingMode)
+		showFolder := resolveShowFolderName(show, shows, cfg.GetLibraryDir(), cfg.FolderNamingMode)
 		for _, f := range show.Files {
 			key := seasonKey{
 				showFolder: showFolder,
@@ -340,9 +369,25 @@ func AlignShowsPartEpisodes(shows []*parser.AnimeShow, cfg *config.Config) {
 // resolveEnglishShowName определяет самое короткое базовое английское имя сериала (без подзаголовков арок)
 func resolveEnglishShowName(show *parser.AnimeShow, allShows []*parser.AnimeShow) string {
 	showName := show.CleanedName
+	if show.RomajiName != "" {
+		if containsCyrillic(showName) {
+			showName = show.RomajiName
+		} else if strings.Contains(show.RomajiName, ":") {
+			parts := strings.Split(show.RomajiName, ":")
+			if strings.TrimSpace(parts[0]) != "" {
+				showName = strings.TrimSpace(parts[0])
+			}
+		}
+	}
+	if strings.Contains(showName, ":") {
+		parts := strings.Split(showName, ":")
+		if strings.TrimSpace(parts[0]) != "" {
+			showName = strings.TrimSpace(parts[0])
+		}
+	}
 	normShowName := normalizeTitle(showName)
 	if normShowName == "" {
-		return showName
+		return sanitizeFileName(showName)
 	}
 
 	bestMatch := showName
@@ -350,6 +395,22 @@ func resolveEnglishShowName(show *parser.AnimeShow, allShows []*parser.AnimeShow
 
 	for _, other := range allShows {
 		otherName := other.CleanedName
+		if other.RomajiName != "" {
+			if containsCyrillic(otherName) {
+				otherName = other.RomajiName
+			} else if strings.Contains(other.RomajiName, ":") {
+				parts := strings.Split(other.RomajiName, ":")
+				if strings.TrimSpace(parts[0]) != "" {
+					otherName = strings.TrimSpace(parts[0])
+				}
+			}
+		}
+		if strings.Contains(otherName, ":") {
+			parts := strings.Split(otherName, ":")
+			if strings.TrimSpace(parts[0]) != "" {
+				otherName = strings.TrimSpace(parts[0])
+			}
+		}
 		normOtherName := normalizeTitle(otherName)
 		if normOtherName != "" {
 			if normShowName == normOtherName || strings.HasPrefix(normShowName, normOtherName+" ") {
@@ -360,7 +421,7 @@ func resolveEnglishShowName(show *parser.AnimeShow, allShows []*parser.AnimeShow
 			}
 		}
 	}
-	return bestMatch
+	return sanitizeFileName(bestMatch)
 }
 
 // GeneratePlan генерирует список операций линкования
@@ -370,26 +431,38 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 	var plan []*LinkOperation
 	usedTargets := make(map[string]string)
 
-	// Считаем максимальный номер эпизода для каждого сезона сериала, чтобы корректно форматировать S01E001 или S01E01
+	libraryDir := cfg.GetLibraryDir()
+
+	// Считаем максимальный номер эпизода для каждого сезона сериала и нумеруем фильмы/спешлы в Season 00
 	type seasonKey struct {
 		showFolder string
 		seasonNum  int
 	}
 	maxEpBySeason := make(map[seasonKey]int)
+	movieEpByShow := make(map[string]int)
+
 	for _, show := range shows {
-		showFolder := resolveShowFolderName(show, shows, cfg.LibraryDir, cfg.FolderNamingMode)
-		for _, file := range show.Files {
-			if !show.IsMovie && file.EpisodeNum > 0 {
-				key := seasonKey{showFolder: showFolder, seasonNum: file.SeasonNum}
-				if file.EpisodeNum > maxEpBySeason[key] {
-					maxEpBySeason[key] = file.EpisodeNum
+		showFolder := resolveShowFolderName(show, shows, libraryDir, cfg.FolderNamingMode)
+		if show.IsMovie {
+			movieEpByShow[showFolder]++
+			for _, file := range show.Files {
+				file.SeasonNum = 0
+				file.EpisodeNum = movieEpByShow[showFolder]
+			}
+		} else {
+			for _, file := range show.Files {
+				if file.EpisodeNum > 0 {
+					key := seasonKey{showFolder: showFolder, seasonNum: file.SeasonNum}
+					if file.EpisodeNum > maxEpBySeason[key] {
+						maxEpBySeason[key] = file.EpisodeNum
+					}
 				}
 			}
 		}
 	}
 
 	for _, show := range shows {
-		showFolder := resolveShowFolderName(show, shows, cfg.LibraryDir, cfg.FolderNamingMode)
+		showFolder := resolveShowFolderName(show, shows, libraryDir, cfg.FolderNamingMode)
 		englishShowTitle := resolveEnglishShowName(show, shows)
 
 		for _, file := range show.Files {
@@ -397,12 +470,13 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 				continue
 			}
 
-			if cfg.LibraryDir == "" {
+			if libraryDir == "" {
 				continue
 			}
 
 			var targetDir string
 			var targetName string
+			var nfoContent string
 			ext := filepath.Ext(file.SourcePath)
 
 			fileTitle := englishShowTitle
@@ -411,8 +485,8 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 			}
 
 			if show.IsMovie {
-				// Кладем фильм во вложенную папку "Films" в папке аниме
-				targetDir = filepath.Join(cfg.LibraryDir, showFolder, "Films")
+				// Кладем фильм в "Season 00" (Спешлы для Jellyfin)
+				targetDir = filepath.Join(libraryDir, showFolder, "Season 00")
 
 				movieTitle := show.CleanedName
 				if show.RomajiName != "" && show.RomajiName != englishShowTitle {
@@ -423,21 +497,58 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 				}
 				movieTitle = sanitizeFileName(movieTitle)
 
+				epNum := file.EpisodeNum
+				if epNum <= 0 {
+					epNum = 1
+				}
+				epTag := fmt.Sprintf("S00E%02d", epNum)
+
+				// Формируем имя файла: ShowTitle S00E01 - MovieTitle.ext
+				parts := []string{fmt.Sprintf("%s %s - %s", fileTitle, epTag, movieTitle)}
+				if file.Suffix != "" {
+					parts = append(parts, file.Suffix)
+				}
+				if file.LangCode != "" {
+					parts = append(parts, file.LangCode)
+				}
+				targetName = strings.Join(parts, ".") + ext
+
+				// Для видеофайла подготавливаем NFO метаданные для Jellyfin
 				if file.Type == parser.TypeVideo {
-					targetName = movieTitle + ext
-				} else {
-					parts := []string{movieTitle}
-					if file.Suffix != "" {
-						parts = append(parts, file.Suffix)
+					displayTitle := movieTitle
+					if strings.ToLower(cfg.FolderNamingMode) == "russian" || cfg.FolderNamingMode == "" {
+						if show.MovieTitleRu != "" {
+							displayTitle = show.MovieTitleRu
+						} else if show.RussianName != "" {
+							displayTitle = show.RussianName
+						}
+					} else if show.MovieRomaji != "" {
+						displayTitle = show.MovieRomaji
+					} else if show.RomajiName != "" {
+						displayTitle = show.RomajiName
 					}
-					if file.LangCode != "" {
-						parts = append(parts, file.LangCode)
+
+					origTitle := show.MovieRomaji
+					if origTitle == "" {
+						origTitle = show.RomajiName
 					}
-					targetName = strings.Join(parts, ".") + ext
+					if origTitle == "" {
+						origTitle = show.CleanedName
+					}
+
+					var idTag string
+					if show.ShikimoriID > 0 {
+						idTag = fmt.Sprintf("  <uniqueid type=\"shikimori\" default=\"true\">%d</uniqueid>\n", show.ShikimoriID)
+					} else if show.AniListID > 0 {
+						idTag = fmt.Sprintf("  <uniqueid type=\"anilist\" default=\"true\">%d</uniqueid>\n", show.AniListID)
+					}
+
+					nfoContent = fmt.Sprintf("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>\n<episodedetails>\n  <title>%s</title>\n  <originaltitle>%s</originaltitle>\n  <showtitle>%s</showtitle>\n  <season>0</season>\n  <episode>%d</episode>\n%s</episodedetails>\n",
+						escapeXML(displayTitle), escapeXML(origTitle), escapeXML(showFolder), epNum, idTag)
 				}
 			} else {
 				// Кладем сериал в "Season XX"
-				targetDir = filepath.Join(cfg.LibraryDir, showFolder, fmt.Sprintf("Season %02d", file.SeasonNum))
+				targetDir = filepath.Join(libraryDir, showFolder, fmt.Sprintf("Season %02d", file.SeasonNum))
 
 				if file.EpisodeNum != -1 {
 					key := seasonKey{showFolder: showFolder, seasonNum: file.SeasonNum}
@@ -498,6 +609,7 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 				SourcePath: file.SourcePath,
 				TargetPath: targetPath,
 				Status:     StatusPending,
+				NfoContent: nfoContent,
 			})
 		}
 	}
@@ -566,6 +678,12 @@ func ApplyPlan(plan []*LinkOperation, statePath string, cfgOptions ...*config.Co
 						Size:       info.Size(),
 						TargetPath: op.TargetPath,
 					}
+					if op.NfoContent != "" {
+						nfoPath := strings.TrimSuffix(op.TargetPath, filepath.Ext(op.TargetPath)) + ".nfo"
+						if _, err := os.Stat(nfoPath); os.IsNotExist(err) {
+							_ = os.WriteFile(nfoPath, []byte(op.NfoContent), 0644)
+						}
+					}
 					continue
 				}
 			}
@@ -593,6 +711,11 @@ func ApplyPlan(plan []*LinkOperation, statePath string, cfgOptions ...*config.Co
 				Mtime:      info.ModTime(),
 				Size:       info.Size(),
 				TargetPath: op.TargetPath,
+			}
+
+			if op.NfoContent != "" {
+				nfoPath := strings.TrimSuffix(op.TargetPath, filepath.Ext(op.TargetPath)) + ".nfo"
+				_ = os.WriteFile(nfoPath, []byte(op.NfoContent), 0644)
 			}
 		}
 	}
@@ -649,6 +772,10 @@ func CleanBrokenLinks(cfg *config.Config, statePath string, activePlan ...[]*Lin
 	if hasPlan {
 		for _, op := range activePlan[0] {
 			validTargets[filepath.Clean(op.TargetPath)] = true
+			if op.NfoContent != "" {
+				nfoPath := strings.TrimSuffix(op.TargetPath, filepath.Ext(op.TargetPath)) + ".nfo"
+				validTargets[filepath.Clean(nfoPath)] = true
+			}
 		}
 	}
 
@@ -671,7 +798,7 @@ func CleanBrokenLinks(cfg *config.Config, statePath string, activePlan ...[]*Lin
 		}
 	}
 
-	dirsToClean := []string{cfg.LibraryDir}
+	dirsToClean := []string{cfg.GetLibraryDir()}
 
 	for _, dir := range dirsToClean {
 		if dir == "" {

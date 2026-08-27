@@ -80,7 +80,7 @@ watch(() => props.config, (cfg) => {
     form.torrent_dirs = Array.isArray(cfg.torrent_dirs) && cfg.torrent_dirs.length > 0
       ? [...cfg.torrent_dirs]
       : ['']
-    form.library_dir = cfg.library_dir || ''
+    form.library_dir = cfg.library_dir || cfg.shows_dir || ''
     form.sync_interval_minutes = cfg.sync_interval_minutes !== undefined ? cfg.sync_interval_minutes : 5
     form.folder_naming_mode = cfg.folder_naming_mode || 'russian'
     form.use_relative_symlinks = cfg.use_relative_symlinks !== undefined ? cfg.use_relative_symlinks : true
@@ -287,23 +287,23 @@ function handleSave() {
     </div>
   </div>
 
-  <!-- Карточка: Библиотека Jellyfin -->
+  <!-- Карточка: Медиатека Jellyfin -->
   <div class="card">
-    <div class="card-title">Библиотека Jellyfin</div>
-    <div class="card-subtitle">Конечная директория для создания структуры симлинков</div>
+    <div class="card-title">Медиатека Jellyfin</div>
+    <div class="card-subtitle">Конечная директория для аниме-библиотеки в Jellyfin</div>
 
     <div class="form-group">
-      <label class="form-label">Путь к общей папке медиатеки аниме:</label>
+      <label class="form-label">Папка медиатеки аниме в Jellyfin:</label>
       <div class="input-row">
         <input
           type="text"
           v-model="form.library_dir"
-          placeholder="/path/to/jellyfin/media"
+          placeholder="/path/to/jellyfin/anime"
         />
         <button
           class="btn-icon"
           @click="openFolderBrowser('library_dir', form.library_dir)"
-          title="Выбрать папку"
+          title="Выбрать папку медиатеки"
           type="button"
         >
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -311,20 +311,19 @@ function handleSave() {
           </svg>
         </button>
       </div>
-      <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 6px; line-height: 1.4;">
-        В этой папке будут создаваться директории аниме,
-        внутри которых серии будут разложены по сезонам (<code>Season 01</code>, <code>Season 02</code>),
-        а полнометражные фильмы — в подпапку <code>Films</code>.
+      <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">
+        Здесь создаются папки тайтлов: сериалы раскладываются по сезонам (<code>Season 01</code>, <code>Season 02</code>), а полнометражные фильмы и спешлы — в <code>Season 00</code> с автоматической генерацией <code>.nfo</code> описаний для Jellyfin.
       </p>
-      <div class="library-notice-box">
-        <svg class="notice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-        <div class="notice-text">
-          <strong>Внимание:</strong> В этой папке порядок полностью наводит JellyAnLi. Сервис автоматически удаляет недействительные симлинки, устаревшие ссылки и пустые каталоги.
-        </div>
+    </div>
+
+    <div class="library-notice-box" style="margin-top: 14px;">
+      <svg class="notice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+      <div class="notice-text">
+        <strong>Внимание:</strong> В этой папке порядок полностью наводит JellyAnLi. Сервис автоматически удаляет недействительные симлинки, устаревшие ссылки и пустые каталоги.
       </div>
     </div>
   </div>

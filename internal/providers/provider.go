@@ -8,9 +8,11 @@ import (
 // AnimeMetadata содержит стандартизированные метаданные об аниме от любого провайдера
 type AnimeMetadata struct {
 	Provider    string // Идентификатор провайдера ("shikimori", "anilist", "anidb")
-	TitleRu     string // Русское название
+	ID          int    // ID на платформе провайдера (например, Shikimori ID)
+	TitleRu     string // Русское название (для фильма — полное название фильма)
 	TitleRomaji string // Официальное название на Ромадзи
 	TitleEn     string // Английское название
+	ShowTitleRu string // Корневое русское название франшизы/сериала
 	Season      int    // Вычисленный номер сезона
 	IsMovie     bool   // Полнометражный фильм
 	IsSpecial   bool   // Спешл / OVA (Season 00)
