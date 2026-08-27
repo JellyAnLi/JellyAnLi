@@ -105,3 +105,36 @@ func TestHTTPClient(t *testing.T) {
 		t.Fatalf("expected configured transport for http proxy")
 	}
 }
+
+func TestShikimoriScoringBlackCloverMovie(t *testing.T) {
+	// Инициализируем изолированный кэш Shikimori
+	restore := SetShikimoriCacheForTest(map[string]CachedShikimoriInfo{
+		"Black Clover Mahoutei no Ken": {
+			Russian:   "Чёрный клевер: Меч короля магов",
+			Romaji:    "Black Clover: Mahou Tei no Ken",
+			Season:    1,
+			IsMovie:   true,
+			IsSpecial: false,
+		},
+	})
+	defer restore()
+
+	prov := Get("shikimori")
+	meta, err := prov.Search("Black Clover Mahoutei no Ken", "")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if meta == nil {
+		t.Fatalf("expected metadata result")
+	}
+	if meta.TitleRu != "Чёрный клевер: Меч короля магов" {
+		t.Errorf("expected TitleRu 'Чёрный клевер: Меч короля магов', got '%s'", meta.TitleRu)
+	}
+	if meta.TitleRomaji != "Black Clover: Mahou Tei no Ken" {
+		t.Errorf("expected TitleRomaji 'Black Clover: Mahou Tei no Ken', got '%s'", meta.TitleRomaji)
+	}
+	if !meta.IsMovie {
+		t.Errorf("expected IsMovie to be true")
+	}
+}
+

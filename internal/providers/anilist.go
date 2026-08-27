@@ -255,7 +255,15 @@ query ($search: String) {
 
 	queryCleanBase := parser.CleanShowName(cleanedQuery)
 	normQueryBase := normalizeTitleString(queryCleanBase)
+	normQueryCompact := strings.ReplaceAll(normQueryBase, " ", "")
 	queryWords := strings.Fields(normQueryBase)
+
+	var significantQueryWords []string
+	for _, w := range queryWords {
+		if !isStopWord(w) {
+			significantQueryWords = append(significantQueryWords, w)
+		}
+	}
 
 	isQuerySpecial := strings.Contains(strings.ToLower(query), "special") || strings.Contains(strings.ToLower(query), "спешл") || strings.Contains(strings.ToLower(query), "ova") || strings.Contains(strings.ToLower(query), "ова")
 	isQueryMovie := parser.IsMovieFolder(query) || parser.IsMovieFolder(cleanedQuery)
@@ -291,24 +299,41 @@ query ($search: String) {
 
 		candCleanBase := normalizeTitleString(parser.CleanShowName(romaji))
 		candCleanEnBase := normalizeTitleString(parser.CleanShowName(english))
+		candCompactRomaji := strings.ReplaceAll(normalizeTitleString(romaji), " ", "")
+		candCompactEn := strings.ReplaceAll(normalizeTitleString(english), " ", "")
 
+		// 1. Точное совпадение названий или без пробелов
 		if normQueryBase != "" && (candCleanBase == normQueryBase || candCleanEnBase == normQueryBase) {
-			score += 15
-		} else if normQueryBase != "" && (strings.HasPrefix(candCleanBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanBase)) {
-			score += 10
+			score += 35
+		} else if normQueryCompact != "" && (candCompactRomaji == normQueryCompact || candCompactEn == normQueryCompact) {
+			score += 35
+		} else if normQueryBase != "" && (strings.HasPrefix(candCleanBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanBase) || strings.HasPrefix(candCleanEnBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanEnBase)) {
+			score += 20
+		} else if normQueryCompact != "" && (strings.HasPrefix(candCompactRomaji, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactRomaji) || strings.HasPrefix(candCompactEn, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactEn)) {
+			score += 20
 		}
 
-		for idx, w := range queryWords {
-			if len(w) >= 2 {
-				if strings.Contains(strings.ToLower(romaji), w) || strings.Contains(strings.ToLower(english), w) {
-					score += 3
-					if idx < 2 {
-						score += 1
-					}
+		// 2. Проверка значимых слов
+		for idx, w := range significantQueryWords {
+			if strings.Contains(strings.ToLower(romaji), w) || strings.Contains(strings.ToLower(english), w) {
+				score += 6
+				if idx == 0 {
+					score += 8 // Первое слово названия — самое важное
+				} else if idx == 1 {
+					score += 4
 				}
 			}
 		}
 
+		// Если первое значимое слово полностью отсутствует в названии кандидата — штрафуем
+		if len(significantQueryWords) > 0 {
+			firstWord := significantQueryWords[0]
+			if !strings.Contains(strings.ToLower(romaji), firstWord) && !strings.Contains(strings.ToLower(english), firstWord) {
+				score -= 25
+			}
+		}
+
+		// 3. Сезоны
 		if hasQuerySeason && querySeason > 1 {
 			if hasCandSeason && candSeason == querySeason {
 				score += 20
@@ -321,6 +346,7 @@ query ($search: String) {
 			}
 		}
 
+		// 4. Формат
 		if isQueryMovie {
 			if isCandMovie {
 				score += 15
@@ -333,11 +359,9 @@ query ($search: String) {
 			}
 		} else {
 			if isCandTv {
-				score += 8
+				score += 4
 			} else if isCandSpecial {
 				score -= 10
-			} else if isCandMovie {
-				score -= 8
 			}
 		}
 

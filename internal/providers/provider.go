@@ -53,3 +53,12 @@ func All() []Provider {
 	}
 	return list
 }
+
+var stopWords = map[string]bool{
+	"no": true, "to": true, "in": true, "of": true, "on": true, "at": true, "by": true, "an": true, "a": true, "is": true, "it": true, "as": true, "or": true, "the": true, "and": true,
+	"и": true, "в": true, "на": true, "с": true, "по": true, "о": true, "к": true, "из": true, "за": true, "от": true, "до": true, "не": true,
+}
+
+func isStopWord(w string) bool {
+	return stopWords[strings.ToLower(w)] || len(w) < 2
+}
