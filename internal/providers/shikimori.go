@@ -69,11 +69,15 @@ type ShikimoriFranchise struct {
 }
 
 type CachedShikimoriInfo struct {
-	Russian   string `json:"russian"`
-	Romaji    string `json:"romaji,omitempty"`
-	Season    int    `json:"season"`
-	IsMovie   bool   `json:"is_movie"`
-	IsSpecial bool   `json:"is_special"`
+	ID          int    `json:"id,omitempty"`
+	Russian     string `json:"russian"`
+	Romaji      string `json:"romaji,omitempty"`
+	MovieRu     string `json:"movie_ru,omitempty"`
+	MovieRomaji string `json:"movie_romaji,omitempty"`
+	ShowRu      string `json:"show_ru,omitempty"`
+	Season      int    `json:"season"`
+	IsMovie     bool   `json:"is_movie"`
+	IsSpecial   bool   `json:"is_special"`
 }
 
 type ShikimoriCache struct {
@@ -183,10 +187,20 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 		if val.Russian == "-" {
 			return nil, nil
 		}
+		titleRu := val.Russian
+		if val.MovieRu != "" {
+			titleRu = val.MovieRu
+		}
+		showTitleRu := val.ShowRu
+		if showTitleRu == "" {
+			showTitleRu = val.Russian
+		}
 		return &AnimeMetadata{
 			Provider:    "shikimori",
-			TitleRu:     val.Russian,
+			ID:          val.ID,
+			TitleRu:     titleRu,
 			TitleRomaji: val.Romaji,
+			ShowTitleRu: showTitleRu,
 			Season:      val.Season,
 			IsMovie:     val.IsMovie,
 			IsSpecial:   val.IsSpecial,
@@ -451,10 +465,22 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 		}
 	}
 
+	movieFullRu := targetAnime.Russian
+	if movieFullRu == "" {
+		movieFullRu = targetAnime.Name
+	}
+	movieFullRomaji := targetAnime.Name
+	if movieFullRomaji == "" {
+		movieFullRomaji = romajiName
+	}
+	showRootRu := russianName
+
 	meta := &AnimeMetadata{
 		Provider:    "shikimori",
-		TitleRu:     russianName,
-		TitleRomaji: romajiName,
+		ID:          targetAnime.ID,
+		TitleRu:     movieFullRu,
+		TitleRomaji: movieFullRomaji,
+		ShowTitleRu: showRootRu,
 		Season:      seasonNum,
 		IsMovie:     isMovie,
 		IsSpecial:   isSpecial,
@@ -462,11 +488,15 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 
 	shikimoriCacheLock.Lock()
 	cache.Translations[query] = CachedShikimoriInfo{
-		Russian:   meta.TitleRu,
-		Romaji:    meta.TitleRomaji,
-		Season:    meta.Season,
-		IsMovie:   meta.IsMovie,
-		IsSpecial: meta.IsSpecial,
+		ID:          meta.ID,
+		Russian:     meta.ShowTitleRu,
+		Romaji:      meta.TitleRomaji,
+		MovieRu:     movieFullRu,
+		MovieRomaji: movieFullRomaji,
+		ShowRu:      showRootRu,
+		Season:      meta.Season,
+		IsMovie:     meta.IsMovie,
+		IsSpecial:   meta.IsSpecial,
 	}
 	shikimoriCacheLock.Unlock()
 	_ = saveShikimoriCache(cache)

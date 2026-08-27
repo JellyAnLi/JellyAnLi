@@ -32,6 +32,10 @@ type AnimeShow struct {
 	CleanedName  string         // Очищенное имя аниме (например, "Kaijuu 8 Gou")
 	RussianName  string         // Русское название аниме из базы (Shikimori)
 	RomajiName   string         // Официальное ромадзи/английское название аниме из базы
+	MovieTitleRu string         // Русское название конкретного фильма
+	MovieRomaji  string         // Ромадзи название конкретного фильма
+	ShikimoriID  int            // ID на Shikimori
+	AniListID    int            // ID на AniList
 	Season       int            // Дефолтный сезон раздачи
 	Part         int            // Номер части/куров (1 по умолчанию)
 	IsMovie      bool           // Является ли фильмом

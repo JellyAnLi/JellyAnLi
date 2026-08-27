@@ -73,7 +73,10 @@ func processShowMetadata(show *parser.AnimeShow, rawName string, cfg *config.Con
 		}
 
 		if meta != nil {
-			if meta.TitleRu != "" {
+			if meta.ShowTitleRu != "" {
+				show.RussianName = meta.ShowTitleRu
+				fmt.Printf("[DEBUG] linker.Scan: Found Russian franchise title for '%s' -> '%s'\n", show.CleanedName, show.RussianName)
+			} else if meta.TitleRu != "" {
 				show.RussianName = meta.TitleRu
 				fmt.Printf("[DEBUG] linker.Scan: Found Russian title for '%s' -> '%s'\n", show.CleanedName, show.RussianName)
 			}
@@ -81,9 +84,16 @@ func processShowMetadata(show *parser.AnimeShow, rawName string, cfg *config.Con
 				show.RomajiName = meta.TitleRomaji
 				fmt.Printf("[DEBUG] linker.Scan: Found Romaji title for '%s' -> '%s'\n", show.CleanedName, show.RomajiName)
 			}
+			if meta.Provider == "shikimori" && meta.ID > 0 {
+				show.ShikimoriID = meta.ID
+			} else if meta.Provider == "anilist" && meta.ID > 0 {
+				show.AniListID = meta.ID
+			}
 			if meta.IsMovie {
 				show.IsMovie = true
-				fmt.Printf("[DEBUG] linker.Scan: Identified movie for '%s'\n", show.CleanedName)
+				show.MovieTitleRu = meta.TitleRu
+				show.MovieRomaji = meta.TitleRomaji
+				fmt.Printf("[DEBUG] linker.Scan: Identified movie for '%s' (title: %s)\n", show.CleanedName, show.MovieTitleRu)
 			} else if meta.IsSpecial {
 				if show.Season <= 1 && !hasExplicitSeason {
 					show.Season = 0
@@ -507,20 +517,34 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 				if file.Type == parser.TypeVideo {
 					displayTitle := movieTitle
 					if strings.ToLower(cfg.FolderNamingMode) == "russian" || cfg.FolderNamingMode == "" {
-						if show.RussianName != "" {
+						if show.MovieTitleRu != "" {
+							displayTitle = show.MovieTitleRu
+						} else if show.RussianName != "" {
 							displayTitle = show.RussianName
 						}
+					} else if show.MovieRomaji != "" {
+						displayTitle = show.MovieRomaji
 					} else if show.RomajiName != "" {
 						displayTitle = show.RomajiName
 					}
 
-					origTitle := show.RomajiName
+					origTitle := show.MovieRomaji
+					if origTitle == "" {
+						origTitle = show.RomajiName
+					}
 					if origTitle == "" {
 						origTitle = show.CleanedName
 					}
 
-					nfoContent = fmt.Sprintf("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>\n<episodedetails>\n  <title>%s</title>\n  <originaltitle>%s</originaltitle>\n  <showtitle>%s</showtitle>\n  <season>0</season>\n  <episode>%d</episode>\n</episodedetails>\n",
-						escapeXML(displayTitle), escapeXML(origTitle), escapeXML(showFolder), epNum)
+					var idTag string
+					if show.ShikimoriID > 0 {
+						idTag = fmt.Sprintf("  <uniqueid type=\"shikimori\" default=\"true\">%d</uniqueid>\n", show.ShikimoriID)
+					} else if show.AniListID > 0 {
+						idTag = fmt.Sprintf("  <uniqueid type=\"anilist\" default=\"true\">%d</uniqueid>\n", show.AniListID)
+					}
+
+					nfoContent = fmt.Sprintf("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>\n<episodedetails>\n  <title>%s</title>\n  <originaltitle>%s</originaltitle>\n  <showtitle>%s</showtitle>\n  <season>0</season>\n  <episode>%d</episode>\n%s</episodedetails>\n",
+						escapeXML(displayTitle), escapeXML(origTitle), escapeXML(showFolder), epNum, idTag)
 				}
 			} else {
 				// Кладем сериал в "Season XX"

@@ -1329,7 +1329,9 @@ func TestBlackCloverRussianDejzDubMovie(t *testing.T) {
 
 	restore := providers.SetShikimoriCacheForTest(map[string]providers.CachedShikimoriInfo{
 		"Черный Клевер Меч Короля Магов": {
+			ID:        50410,
 			Russian:   "Чёрный клевер",
+			MovieRu:   "Чёрный клевер: Меч короля магов",
 			Romaji:    "Black Clover: Mahou Tei no Ken",
 			Season:    1,
 			IsMovie:   true,
@@ -1396,8 +1398,14 @@ func TestBlackCloverRussianDejzDubMovie(t *testing.T) {
 	nfoTarget := filepath.Join(expectedDir, "Black Clover S00E01 - Black Clover - Mahou Tei no Ken.nfo")
 	if data, err := os.ReadFile(nfoTarget); err != nil {
 		t.Errorf("nfo file not created at %s: %v", nfoTarget, err)
-	} else if !strings.Contains(string(data), "<title>Чёрный клевер</title>") {
-		t.Errorf("nfo missing expected Russian title, got: %s", string(data))
+	} else {
+		content := string(data)
+		if !strings.Contains(content, "<title>Чёрный клевер: Меч короля магов</title>") {
+			t.Errorf("nfo missing expected Russian title, got: %s", content)
+		}
+		if !strings.Contains(content, `<uniqueid type="shikimori" default="true">50410</uniqueid>`) {
+			t.Errorf("nfo missing shikimori ID, got: %s", content)
+		}
 	}
 }
 
