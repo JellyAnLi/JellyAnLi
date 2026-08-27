@@ -28,6 +28,80 @@ type LinkOperation struct {
 	Message    string     `json:"message,omitempty"`
 }
 
+func processShowMetadata(show *parser.AnimeShow, rawName string, cfg *config.Config) {
+	hasExplicitSeason := false
+	if _, ok := parser.HasExplicitSeason(rawName); ok {
+		hasExplicitSeason = true
+	}
+
+	providersList := cfg.MetadataProviders
+	if len(providersList) == 0 && cfg.UseShikimori {
+		providersList = []string{"shikimori", "anilist", "anidb"}
+	}
+
+	if len(providersList) > 0 {
+		query := show.CleanedName
+		if show.Season > 1 && !show.IsMovie {
+			query = fmt.Sprintf("%s %d", show.CleanedName, show.Season)
+		}
+
+		var meta *providers.AnimeMetadata
+		for _, provID := range providersList {
+			prov := providers.Get(provID)
+			if prov == nil {
+				continue
+			}
+
+			proxyURL := ""
+			if cfg.ProxyRouting != nil {
+				proxyURL = cfg.ProxyRouting.GetProxyFor(provID)
+			} else if cfg.ProxyURL != "" {
+				proxyURL = cfg.ProxyURL
+			}
+
+			m, err := prov.Search(query, proxyURL)
+			if err == nil && m == nil && show.Season > 1 && !show.IsMovie {
+				m, err = prov.Search(show.CleanedName, proxyURL)
+			}
+
+			if err == nil && m != nil && (m.TitleRu != "" || m.TitleRomaji != "" || m.Season > 0 || m.IsMovie) {
+				meta = m
+				fmt.Printf("[DEBUG] linker.Scan: Provider '%s' matched '%s'\n", provID, show.CleanedName)
+				break
+			}
+		}
+
+		if meta != nil {
+			if meta.TitleRu != "" {
+				show.RussianName = meta.TitleRu
+				fmt.Printf("[DEBUG] linker.Scan: Found Russian title for '%s' -> '%s'\n", show.CleanedName, show.RussianName)
+			}
+			if meta.TitleRomaji != "" {
+				show.RomajiName = meta.TitleRomaji
+				fmt.Printf("[DEBUG] linker.Scan: Found Romaji title for '%s' -> '%s'\n", show.CleanedName, show.RomajiName)
+			}
+			if meta.IsMovie {
+				show.IsMovie = true
+				fmt.Printf("[DEBUG] linker.Scan: Identified movie for '%s'\n", show.CleanedName)
+			} else if meta.IsSpecial {
+				if show.Season <= 1 && !hasExplicitSeason {
+					show.Season = 0
+					fmt.Printf("[DEBUG] linker.Scan: Identified special/OVA for '%s' -> Season 00\n", show.CleanedName)
+					for _, f := range show.Files {
+						f.SeasonNum = 0
+					}
+				}
+			} else if meta.Season > 1 && show.Season == 1 && !show.IsMovie {
+				show.Season = meta.Season
+				fmt.Printf("[DEBUG] linker.Scan: Calculated franchise season for '%s' -> Season %d\n", show.CleanedName, meta.Season)
+				for _, f := range show.Files {
+					f.SeasonNum = meta.Season
+				}
+			}
+		}
+	}
+}
+
 // Scan сканирует директорию с торрентами и группирует файлы по раздачам
 func Scan(cfg *config.Config) ([]*parser.AnimeShow, error) {
 	var shows []*parser.AnimeShow
@@ -54,111 +128,60 @@ func Scan(cfg *config.Config) ([]*parser.AnimeShow, error) {
 		}
 
 		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
+			if entry.IsDir() {
+				showFolderName := entry.Name()
+				showAbsPath := filepath.Join(dir, showFolderName)
 
-			showFolderName := entry.Name()
-			showAbsPath := filepath.Join(dir, showFolderName)
+				fmt.Println("[DEBUG] linker.Scan: Processing folder", showFolderName)
 
-			fmt.Println("[DEBUG] linker.Scan: Processing folder", showFolderName)
-
-			var relFiles []string
-			err := filepath.WalkDir(showAbsPath, func(path string, d fs.DirEntry, err error) error {
-				if err != nil {
+				var relFiles []string
+				err := filepath.WalkDir(showAbsPath, func(path string, d fs.DirEntry, err error) error {
+					if err != nil {
+						return nil
+					}
+					if !d.IsDir() {
+						relPath, err := filepath.Rel(showAbsPath, path)
+						if err == nil {
+							relFiles = append(relFiles, relPath)
+						}
+					}
 					return nil
+				})
+
+				if err != nil {
+					continue
 				}
-				if !d.IsDir() {
-					relPath, err := filepath.Rel(showAbsPath, path)
-					if err == nil {
-						relFiles = append(relFiles, relPath)
+
+				show := parser.ParseShowFolder(showFolderName, relFiles, cfg.LanguageMapping)
+				if len(show.Files) > 0 {
+					processShowMetadata(show, showFolderName, cfg)
+					// Преобразуем относительные пути файлов в абсолютные
+					for _, f := range show.Files {
+						f.SourcePath = filepath.Join(showAbsPath, f.SourcePath)
 					}
+					shows = append(shows, show)
 				}
-				return nil
-			})
-
-			if err != nil {
-				continue
-			}
-
-			show := parser.ParseShowFolder(showFolderName, relFiles, cfg.LanguageMapping)
-			if len(show.Files) > 0 {
-				hasExplicitSeason := false
-				if _, ok := parser.HasExplicitSeason(showFolderName); ok {
-					hasExplicitSeason = true
+			} else {
+				// Одиночный файл в корне папки раздач (фильм или серия)
+				fileName := entry.Name()
+				if parser.ClassifyFileType(fileName) == parser.TypeUnknown {
+					continue
 				}
 
-				providersList := cfg.MetadataProviders
-				if len(providersList) == 0 && cfg.UseShikimori {
-					providersList = []string{"shikimori", "anilist", "anidb"}
-				}
+				fmt.Println("[DEBUG] linker.Scan: Processing standalone file", fileName)
 
-				if len(providersList) > 0 {
-					query := show.CleanedName
-					if show.Season > 1 {
-						query = fmt.Sprintf("%s %d", show.CleanedName, show.Season)
+				showFolderName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+				relFiles := []string{fileName}
+
+				show := parser.ParseShowFolder(showFolderName, relFiles, cfg.LanguageMapping)
+				if len(show.Files) > 0 {
+					processShowMetadata(show, showFolderName, cfg)
+					// Преобразуем относительные пути файлов в абсолютные
+					for _, f := range show.Files {
+						f.SourcePath = filepath.Join(dir, f.SourcePath)
 					}
-
-					var meta *providers.AnimeMetadata
-					for _, provID := range providersList {
-						prov := providers.Get(provID)
-						if prov == nil {
-							continue
-						}
-
-						proxyURL := ""
-						if cfg.ProxyRouting != nil {
-							proxyURL = cfg.ProxyRouting.GetProxyFor(provID)
-						} else if cfg.ProxyURL != "" {
-							proxyURL = cfg.ProxyURL
-						}
-
-						m, err := prov.Search(query, proxyURL)
-						if err == nil && m == nil && show.Season > 1 {
-							m, err = prov.Search(show.CleanedName, proxyURL)
-						}
-
-						if err == nil && m != nil && (m.TitleRu != "" || m.TitleRomaji != "" || m.Season > 0) {
-							meta = m
-							fmt.Printf("[DEBUG] linker.Scan: Provider '%s' matched '%s'\n", provID, show.CleanedName)
-							break
-						}
-					}
-
-					if meta != nil {
-						if meta.TitleRu != "" {
-							show.RussianName = meta.TitleRu
-							fmt.Printf("[DEBUG] linker.Scan: Found Russian title for '%s' -> '%s'\n", show.CleanedName, show.RussianName)
-						}
-						if meta.TitleRomaji != "" {
-							show.RomajiName = meta.TitleRomaji
-							fmt.Printf("[DEBUG] linker.Scan: Found Romaji title for '%s' -> '%s'\n", show.CleanedName, show.RomajiName)
-						}
-						if meta.IsMovie {
-							show.IsMovie = true
-							fmt.Printf("[DEBUG] linker.Scan: Identified movie for '%s'\n", show.CleanedName)
-						} else if meta.IsSpecial {
-							if show.Season <= 1 && !hasExplicitSeason {
-								show.Season = 0
-								fmt.Printf("[DEBUG] linker.Scan: Identified special/OVA for '%s' -> Season 00\n", show.CleanedName)
-								for _, f := range show.Files {
-									f.SeasonNum = 0
-								}
-							}
-						} else if meta.Season > 1 && show.Season == 1 {
-							show.Season = meta.Season
-							fmt.Printf("[DEBUG] linker.Scan: Calculated franchise season for '%s' -> Season %d\n", show.CleanedName, meta.Season)
-							for _, f := range show.Files {
-								f.SeasonNum = meta.Season
-							}
-						}
-					}
+					shows = append(shows, show)
 				}
-				// Преобразуем относительные пути файлов в абсолютные
-				for _, f := range show.Files {
-					f.SourcePath = filepath.Join(showAbsPath, f.SourcePath)
-				}
-				shows = append(shows, show)
 			}
 		}
 	}
@@ -166,12 +189,27 @@ func Scan(cfg *config.Config) ([]*parser.AnimeShow, error) {
 	return shows, nil
 }
 
+func sanitizeFileName(name string) string {
+	name = strings.ReplaceAll(name, ": ", " - ")
+	name = strings.ReplaceAll(name, ":", " - ")
+	name = strings.ReplaceAll(name, "/", " ")
+	name = strings.ReplaceAll(name, "\\", " ")
+	name = strings.ReplaceAll(name, "*", "")
+	name = strings.ReplaceAll(name, "?", "")
+	name = strings.ReplaceAll(name, "\"", "")
+	name = strings.ReplaceAll(name, "<", "")
+	name = strings.ReplaceAll(name, ">", "")
+	name = strings.ReplaceAll(name, "|", "")
+	return strings.TrimSpace(strings.Join(strings.Fields(name), " "))
+}
+
 // Вспомогательная функция для нормализации строк при сравнении
 func normalizeTitle(s string) string {
 	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, "ё", "е")
 	var sb strings.Builder
 	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || (r >= 'а' && r <= 'я') || (r >= 'А' && r <= 'Я') || r == ' ' {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || (r >= 'а' && r <= 'я') || r == ' ' {
 			sb.WriteRune(r)
 		}
 	}
@@ -205,8 +243,8 @@ func resolveShowFolderName(show *parser.AnimeShow, allShows []*parser.AnimeShow,
 		return showName
 	}
 
-	var bestMatch string
-	bestMatchLen := 0
+	bestMatch := showName
+	bestMatchLen := len(normShowName)
 
 	for _, other := range allShows {
 		if other == show {
@@ -227,18 +265,16 @@ func resolveShowFolderName(show *parser.AnimeShow, allShows []*parser.AnimeShow,
 		}
 		normOtherName := normalizeTitle(otherName)
 		if normOtherName != "" {
-			if normShowName == normOtherName || strings.HasPrefix(normShowName, normOtherName) {
-				if len(normOtherName) > bestMatchLen {
+			if normShowName == normOtherName {
+				bestMatch = otherName
+				bestMatchLen = len(normOtherName)
+			} else if strings.HasPrefix(normShowName, normOtherName+" ") {
+				if len(normOtherName) < bestMatchLen {
 					bestMatchLen = len(normOtherName)
 					bestMatch = otherName
 				}
 			}
 		}
-	}
-
-	if bestMatch != "" {
-		fmt.Printf("[DEBUG] resolveShowFolderName: Matched show '%s' to active show '%s'\n", showName, bestMatch)
-		return bestMatch
 	}
 
 	// Ищем среди уже существующих папок в libraryDir
@@ -251,8 +287,11 @@ func resolveShowFolderName(show *parser.AnimeShow, allShows []*parser.AnimeShow,
 				existName := entry.Name()
 				normExistName := normalizeTitle(existName)
 				if normExistName != "" {
-					if normShowName == normExistName || strings.HasPrefix(normShowName, normExistName) {
-						if len(normExistName) > bestMatchLen {
+					if normShowName == normExistName {
+						bestMatch = existName
+						bestMatchLen = len(normExistName)
+					} else if strings.HasPrefix(normShowName, normExistName+" ") {
+						if len(normExistName) < bestMatchLen {
 							bestMatchLen = len(normExistName)
 							bestMatch = existName
 						}
@@ -262,12 +301,11 @@ func resolveShowFolderName(show *parser.AnimeShow, allShows []*parser.AnimeShow,
 		}
 	}
 
-	if bestMatch != "" {
-		fmt.Printf("[DEBUG] resolveShowFolderName: Matched show '%s' to existing library folder '%s'\n", showName, bestMatch)
-		return bestMatch
+	if bestMatch != showName {
+		fmt.Printf("[DEBUG] resolveShowFolderName: Matched show '%s' to root show '%s'\n", showName, bestMatch)
 	}
 
-	return showName
+	return bestMatch
 }
 
 // AlignShowsPartEpisodes выравнивает части/куры между всеми раздачами одного сериала и сезона
@@ -314,7 +352,7 @@ func resolveEnglishShowName(show *parser.AnimeShow, allShows []*parser.AnimeShow
 		otherName := other.CleanedName
 		normOtherName := normalizeTitle(otherName)
 		if normOtherName != "" {
-			if normShowName == normOtherName || strings.HasPrefix(normShowName, normOtherName) {
+			if normShowName == normOtherName || strings.HasPrefix(normShowName, normOtherName+" ") {
 				if len(normOtherName) < bestMatchLen {
 					bestMatchLen = len(normOtherName)
 					bestMatch = otherName
@@ -376,10 +414,19 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 				// Кладем фильм во вложенную папку "Films" в папке аниме
 				targetDir = filepath.Join(cfg.LibraryDir, showFolder, "Films")
 
+				movieTitle := show.CleanedName
+				if show.RomajiName != "" && show.RomajiName != englishShowTitle {
+					movieTitle = show.RomajiName
+				}
+				if movieTitle == "" {
+					movieTitle = fileTitle
+				}
+				movieTitle = sanitizeFileName(movieTitle)
+
 				if file.Type == parser.TypeVideo {
-					targetName = fileTitle + ext
+					targetName = movieTitle + ext
 				} else {
-					parts := []string{fileTitle}
+					parts := []string{movieTitle}
 					if file.Suffix != "" {
 						parts = append(parts, file.Suffix)
 					}

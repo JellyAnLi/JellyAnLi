@@ -361,7 +361,9 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 	seasonNum := 1
 	if isSpecial {
 		seasonNum = 0
-	} else if !isMovie {
+	}
+
+	if !isSpecial {
 		waitShikimoriRateLimit()
 		franchiseUrl := fmt.Sprintf("%s/api/animes/%d/franchise", shikimoriHost, targetAnime.ID)
 		fReq, err := http.NewRequest("GET", franchiseUrl, nil)
@@ -397,23 +399,36 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 							return tvNodes[i].Date < tvNodes[j].Date
 						})
 
-						for idx, node := range tvNodes {
-							if node.ID == targetAnime.ID {
-								seasonNum = idx + 1
-								if len(tvNodes) > 0 {
-									rootRus := tvNodes[0].Russian
-									if rootRus != "" {
-										rootClean := cleanRussianSeason(rootRus)
-										if rootClean != "" {
-											russianName = rootClean
+						if !isMovie {
+							for idx, node := range tvNodes {
+								if node.ID == targetAnime.ID {
+									seasonNum = idx + 1
+									if len(tvNodes) > 0 {
+										rootRus := tvNodes[0].Russian
+										if rootRus != "" {
+											rootClean := cleanRussianSeason(rootRus)
+											if rootClean != "" {
+												russianName = rootClean
+											}
+										}
+										rootRom := parser.CleanShowName(tvNodes[0].Name)
+										if rootRom != "" {
+											romajiName = rootRom
 										}
 									}
-									rootRom := parser.CleanShowName(tvNodes[0].Name)
-									if rootRom != "" {
-										romajiName = rootRom
+									break
+								}
+							}
+						} else {
+							// Для фильма: если во франшизе есть основной сериал, используем его корневое русское название для папки
+							if len(tvNodes) > 0 {
+								rootRus := tvNodes[0].Russian
+								if rootRus != "" {
+									rootClean := cleanRussianSeason(rootRus)
+									if rootClean != "" {
+										russianName = rootClean
 									}
 								}
-								break
 							}
 						}
 					}
@@ -447,6 +462,7 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 
 func normalizeTitleString(s string) string {
 	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, "ё", "е")
 	var sb strings.Builder
 	for _, r := range s {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || (r >= 'а' && r <= 'я') || r == ' ' {

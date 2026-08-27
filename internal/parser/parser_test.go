@@ -12,7 +12,7 @@ func TestCleanShowName(t *testing.T) {
 	}{
 		{"Kaijuu 8 Gou TV-2 [1080p]mp4 tag RUTRacker", "Kaijuu 8 Gou"},
 		{"[SubsPlease] Shingeki no Kyojin - S4E12 (1080p) [1234ABCD]", "Shingeki no Kyojin"},
-		{"Клинок рассекающий демонов 3 сезон (ТВ-3) 2023", "Клинок рассекающий демонов 2023"},
+		{"Клинок рассекающий демонов 3 сезон (ТВ-3) 2023", "Клинок рассекающий демонов"},
 		{"Kimetsu no Yaiba - Katanakaji no Sato-hen [BD 1080p HEVC FLAC]", "Kimetsu no Yaiba Katanakaji no Sato hen"},
 		{"Mushoku Tensei Isekai Ittara Honki Dasu II", "Mushoku Tensei Isekai Ittara Honki Dasu"},
 		{"Mushoku Tensei Isekai Ittara Honki Dasu 2nd Season", "Mushoku Tensei Isekai Ittara Honki Dasu"},

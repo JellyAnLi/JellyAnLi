@@ -1045,5 +1045,344 @@ func TestProvidersFallbackChain(t *testing.T) {
 	}
 }
 
+func TestBlackCloverMovieWithSeries(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jelly-an-li-black-clover-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	restore := providers.SetShikimoriCacheForTest(map[string]providers.CachedShikimoriInfo{
+		"Black Clover": {
+			Russian:   "Чёрный клевер",
+			Romaji:    "Black Clover",
+			Season:    1,
+			IsMovie:   false,
+			IsSpecial: false,
+		},
+		"Black Clover Mahoutei no Ken": {
+			Russian:   "Чёрный клевер: Меч короля магов",
+			Romaji:    "Black Clover: Mahou Tei no Ken",
+			Season:    1,
+			IsMovie:   true,
+			IsSpecial: false,
+		},
+	})
+	defer restore()
+
+	torrentsDir := filepath.Join(tmpDir, "Torrents")
+	jellyLibraryDir := filepath.Join(tmpDir, "Jellyfin")
+	os.MkdirAll(torrentsDir, 0755)
+	os.MkdirAll(jellyLibraryDir, 0755)
+
+	// 1. Папка с сериалом Чёрный клевер
+	seriesFolder := filepath.Join(torrentsDir, "[Judas]_Black_Clover_(170ep+Extras)_[BDrip_1080p][HEVC_x265_10bit][RUS+JP+ENG][Multi-Subs]")
+	os.MkdirAll(seriesFolder, 0755)
+	ep1 := filepath.Join(seriesFolder, "Black_Clover_-_001.mkv")
+	ep170 := filepath.Join(seriesFolder, "Black_Clover_-_170.mkv")
+	os.WriteFile(ep1, []byte("ep 1"), 0644)
+	os.WriteFile(ep170, []byte("ep 170"), 0644)
+
+	// 2. Одиночный файл фильма прямо в корне /Torrents
+	movieFile := filepath.Join(torrentsDir, "Eiga Black Clover Mahoutei no Ken (BD 1920x1080 x265-10Bit DTS Flac).mkv")
+	os.WriteFile(movieFile, []byte("movie content"), 0644)
+
+	cfg := &config.Config{
+		TorrentDirs:  []string{torrentsDir},
+		LibraryDir:   jellyLibraryDir,
+		UseShikimori: true,
+	}
+
+	shows, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if len(shows) != 2 {
+		t.Fatalf("expected 2 shows scanned (1 series + 1 standalone movie), got %d", len(shows))
+	}
+
+	plan := GeneratePlan(shows, cfg)
+	if len(plan) != 3 {
+		t.Fatalf("expected 3 operations in plan, got %d", len(plan))
+	}
+
+	for _, op := range plan {
+		if op.SourcePath == movieFile {
+			// Должен быть в Чёрный клевер / Films / ...
+			expectedDir := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Films")
+			actualDir := filepath.Dir(op.TargetPath)
+			if actualDir != expectedDir {
+				t.Errorf("expected movie dir '%s', got '%s'", expectedDir, actualDir)
+			}
+			expectedFile := "Black Clover - Mahou Tei no Ken.mkv"
+			actualFile := filepath.Base(op.TargetPath)
+			if actualFile != expectedFile {
+				t.Errorf("expected movie file '%s', got '%s'", expectedFile, actualFile)
+			}
+		} else {
+			expectedDir := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Season 01")
+			actualDir := filepath.Dir(op.TargetPath)
+			if actualDir != expectedDir {
+				t.Errorf("expected series dir '%s', got '%s'", expectedDir, actualDir)
+			}
+		}
+	}
+
+	err = ApplyPlan(plan, filepath.Join(tmpDir, "state.json"))
+	if err != nil {
+		t.Fatalf("ApplyPlan failed: %v", err)
+	}
+
+	// Проверяем, что файл фильма создан в Films/
+	movieTarget := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Films", "Black Clover - Mahou Tei no Ken.mkv")
+	if info, err := os.Lstat(movieTarget); err != nil {
+		t.Errorf("movie link not found at %s: %v", movieTarget, err)
+	} else if info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("movie target is not a symlink: %s", movieTarget)
+	}
+}
+
+func TestKimetsuMugenResshaMovieStandalone(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jelly-an-li-kimetsu-movie-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	restore := providers.SetShikimoriCacheForTest(map[string]providers.CachedShikimoriInfo{
+		"Kimetsu no Yaiba": {
+			Russian:   "Клинок, рассекающий демонов",
+			Romaji:    "Kimetsu no Yaiba",
+			Season:    1,
+			IsMovie:   false,
+			IsSpecial: false,
+		},
+		"Kimetsu no Yaiba Mugen Ressha Hen": {
+			Russian:   "Клинок, рассекающий демонов: Поезд «Бесконечный»",
+			Romaji:    "Kimetsu no Yaiba: Mugen Ressha-hen",
+			Season:    1,
+			IsMovie:   true,
+			IsSpecial: false,
+		},
+	})
+	defer restore()
+
+	torrentsDir := filepath.Join(tmpDir, "Torrents")
+	jellyLibraryDir := filepath.Join(tmpDir, "Jellyfin")
+	os.MkdirAll(torrentsDir, 0755)
+	os.MkdirAll(jellyLibraryDir, 0755)
+
+	// 1. Папка с 1 сезоном сериала Клинок
+	seriesFolder := filepath.Join(torrentsDir, "[Kawaiika-Raws] (2019) Kimetsu no Yaiba [BDRip 1920x1080 HEVC FLAC]")
+	os.MkdirAll(seriesFolder, 0755)
+	ep1 := filepath.Join(seriesFolder, "[Kawaiika-Raws] Kimetsu no Yaiba 01.mkv")
+	os.WriteFile(ep1, []byte("ep 1"), 0644)
+
+	// 2. Одиночный файл фильма в корне /Torrents
+	movieFile := filepath.Join(torrentsDir, "Gekijouban.Kimetsu.no.Yaiba.Mugen.Ressha.Hen.2020.BDRip.1080p.JanNYy.mkv")
+	os.WriteFile(movieFile, []byte("movie content"), 0644)
+
+	cfg := &config.Config{
+		TorrentDirs:  []string{torrentsDir},
+		LibraryDir:   jellyLibraryDir,
+		UseShikimori: true,
+	}
+
+	shows, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if len(shows) != 2 {
+		t.Fatalf("expected 2 shows scanned (1 series + 1 standalone movie), got %d", len(shows))
+	}
+
+	plan := GeneratePlan(shows, cfg)
+	if len(plan) != 2 {
+		t.Fatalf("expected 2 operations in plan, got %d", len(plan))
+	}
+
+	for _, op := range plan {
+		if op.SourcePath == movieFile {
+			expectedDir := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Films")
+			actualDir := filepath.Dir(op.TargetPath)
+			if actualDir != expectedDir {
+				t.Errorf("expected movie dir '%s', got '%s'", expectedDir, actualDir)
+			}
+			expectedFile := "Kimetsu no Yaiba - Mugen Ressha-hen.mkv"
+			actualFile := filepath.Base(op.TargetPath)
+			if actualFile != expectedFile {
+				t.Errorf("expected movie file '%s', got '%s'", expectedFile, actualFile)
+			}
+		} else {
+			expectedDir := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Season 01")
+			actualDir := filepath.Dir(op.TargetPath)
+			if actualDir != expectedDir {
+				t.Errorf("expected series dir '%s', got '%s'", expectedDir, actualDir)
+			}
+		}
+	}
+
+	err = ApplyPlan(plan, filepath.Join(tmpDir, "state.json"))
+	if err != nil {
+		t.Fatalf("ApplyPlan failed: %v", err)
+	}
+
+	movieTarget := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Films", "Kimetsu no Yaiba - Mugen Ressha-hen.mkv")
+	if info, err := os.Lstat(movieTarget); err != nil {
+		t.Errorf("movie link not found at %s: %v", movieTarget, err)
+	} else if info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("movie target is not a symlink: %s", movieTarget)
+	}
+}
+
+func TestKimetsuMovieOnlyWithoutAnyPreviousSeasons(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jelly-an-li-kimetsu-only-movie-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	restore := providers.SetShikimoriCacheForTest(map[string]providers.CachedShikimoriInfo{
+		"Kimetsu no Yaiba Mugen Ressha Hen": {
+			Russian:   "Клинок, рассекающий демонов",
+			Romaji:    "Kimetsu no Yaiba: Mugen Ressha-hen",
+			Season:    1,
+			IsMovie:   true,
+			IsSpecial: false,
+		},
+	})
+	defer restore()
+
+	torrentsDir := filepath.Join(tmpDir, "Torrents")
+	jellyLibraryDir := filepath.Join(tmpDir, "Jellyfin")
+	os.MkdirAll(torrentsDir, 0755)
+	os.MkdirAll(jellyLibraryDir, 0755)
+
+	// В раздачах ТОЛЬКО один файл фильма, никаких папок и сезонов нет
+	movieFile := filepath.Join(torrentsDir, "Gekijouban.Kimetsu.no.Yaiba.Mugen.Ressha.Hen.2020.BDRip.1080p.JanNYy.mkv")
+	os.WriteFile(movieFile, []byte("movie content"), 0644)
+
+	cfg := &config.Config{
+		TorrentDirs:  []string{torrentsDir},
+		LibraryDir:   jellyLibraryDir,
+		UseShikimori: true,
+	}
+
+	shows, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if len(shows) != 1 {
+		t.Fatalf("expected 1 show scanned, got %d", len(shows))
+	}
+
+	plan := GeneratePlan(shows, cfg)
+	if len(plan) != 1 {
+		t.Fatalf("expected 1 operation in plan, got %d", len(plan))
+	}
+
+	expectedDir := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Films")
+	if filepath.Dir(plan[0].TargetPath) != expectedDir {
+		t.Errorf("expected target dir '%s', got '%s'", expectedDir, filepath.Dir(plan[0].TargetPath))
+	}
+
+	expectedFile := "Kimetsu no Yaiba - Mugen Ressha-hen.mkv"
+	if filepath.Base(plan[0].TargetPath) != expectedFile {
+		t.Errorf("expected target file '%s', got '%s'", expectedFile, filepath.Base(plan[0].TargetPath))
+	}
+
+	err = ApplyPlan(plan, filepath.Join(tmpDir, "state.json"))
+	if err != nil {
+		t.Fatalf("ApplyPlan failed: %v", err)
+	}
+
+	movieTarget := filepath.Join(expectedDir, expectedFile)
+	if info, err := os.Lstat(movieTarget); err != nil {
+		t.Errorf("movie link not found at %s: %v", movieTarget, err)
+	} else if info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("movie target is not a symlink: %s", movieTarget)
+	}
+}
+
+func TestBlackCloverRussianDejzDubMovie(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jelly-an-li-bc-dejzdub-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	restore := providers.SetShikimoriCacheForTest(map[string]providers.CachedShikimoriInfo{
+		"Черный Клевер Меч Короля Магов": {
+			Russian:   "Чёрный клевер",
+			Romaji:    "Black Clover: Mahou Tei no Ken",
+			Season:    1,
+			IsMovie:   true,
+			IsSpecial: false,
+		},
+	})
+	defer restore()
+
+	torrentsDir := filepath.Join(tmpDir, "Torrents")
+	jellyLibraryDir := filepath.Join(tmpDir, "Jellyfin")
+	os.MkdirAll(torrentsDir, 0755)
+	os.MkdirAll(jellyLibraryDir, 0755)
+
+	movieFile := filepath.Join(torrentsDir, "Черный Клевер Меч Короля Магов 1080 (DejzDub)mp4.mp4")
+	os.WriteFile(movieFile, []byte("mp4 content"), 0644)
+
+	cfg := &config.Config{
+		TorrentDirs:  []string{torrentsDir},
+		LibraryDir:   jellyLibraryDir,
+		UseShikimori: true,
+	}
+
+	shows, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if len(shows) != 1 {
+		t.Fatalf("expected 1 show scanned, got %d", len(shows))
+	}
+
+	show := shows[0]
+	if !show.IsMovie {
+		t.Errorf("expected show.IsMovie to be true")
+	}
+
+	plan := GeneratePlan(shows, cfg)
+	if len(plan) != 1 {
+		t.Fatalf("expected 1 operation in plan, got %d", len(plan))
+	}
+
+	expectedDir := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Films")
+	if filepath.Dir(plan[0].TargetPath) != expectedDir {
+		t.Errorf("expected target dir '%s', got '%s'", expectedDir, filepath.Dir(plan[0].TargetPath))
+	}
+
+	expectedFile := "Black Clover - Mahou Tei no Ken.mp4"
+	if filepath.Base(plan[0].TargetPath) != expectedFile {
+		t.Errorf("expected target file '%s', got '%s'", expectedFile, filepath.Base(plan[0].TargetPath))
+	}
+
+	err = ApplyPlan(plan, filepath.Join(tmpDir, "state.json"))
+	if err != nil {
+		t.Fatalf("ApplyPlan failed: %v", err)
+	}
+
+	movieTarget := filepath.Join(expectedDir, expectedFile)
+	if info, err := os.Lstat(movieTarget); err != nil {
+		t.Errorf("movie link not found at %s: %v", movieTarget, err)
+	} else if info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("movie target is not a symlink: %s", movieTarget)
+	}
+}
+
+
+
+
 
 
