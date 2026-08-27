@@ -1109,13 +1109,13 @@ func TestBlackCloverMovieWithSeries(t *testing.T) {
 
 	for _, op := range plan {
 		if op.SourcePath == movieFile {
-			// Должен быть в Чёрный клевер / Films / ...
-			expectedDir := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Films")
+			// Должен быть в Чёрный клевер / Season 00 / ...
+			expectedDir := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Season 00")
 			actualDir := filepath.Dir(op.TargetPath)
 			if actualDir != expectedDir {
 				t.Errorf("expected movie dir '%s', got '%s'", expectedDir, actualDir)
 			}
-			expectedFile := "Black Clover - Mahou Tei no Ken.mkv"
+			expectedFile := "Black Clover S00E01 - Black Clover - Mahou Tei no Ken.mkv"
 			actualFile := filepath.Base(op.TargetPath)
 			if actualFile != expectedFile {
 				t.Errorf("expected movie file '%s', got '%s'", expectedFile, actualFile)
@@ -1134,8 +1134,8 @@ func TestBlackCloverMovieWithSeries(t *testing.T) {
 		t.Fatalf("ApplyPlan failed: %v", err)
 	}
 
-	// Проверяем, что файл фильма создан в Films/
-	movieTarget := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Films", "Black Clover - Mahou Tei no Ken.mkv")
+	// Проверяем, что файл фильма создан в Season 00/
+	movieTarget := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Season 00", "Black Clover S00E01 - Black Clover - Mahou Tei no Ken.mkv")
 	if info, err := os.Lstat(movieTarget); err != nil {
 		t.Errorf("movie link not found at %s: %v", movieTarget, err)
 	} else if info.Mode()&os.ModeSymlink == 0 {
@@ -1205,12 +1205,12 @@ func TestKimetsuMugenResshaMovieStandalone(t *testing.T) {
 
 	for _, op := range plan {
 		if op.SourcePath == movieFile {
-			expectedDir := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Films")
+			expectedDir := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Season 00")
 			actualDir := filepath.Dir(op.TargetPath)
 			if actualDir != expectedDir {
 				t.Errorf("expected movie dir '%s', got '%s'", expectedDir, actualDir)
 			}
-			expectedFile := "Kimetsu no Yaiba - Mugen Ressha-hen.mkv"
+			expectedFile := "Kimetsu no Yaiba S00E01 - Kimetsu no Yaiba - Mugen Ressha-hen.mkv"
 			actualFile := filepath.Base(op.TargetPath)
 			if actualFile != expectedFile {
 				t.Errorf("expected movie file '%s', got '%s'", expectedFile, actualFile)
@@ -1229,7 +1229,7 @@ func TestKimetsuMugenResshaMovieStandalone(t *testing.T) {
 		t.Fatalf("ApplyPlan failed: %v", err)
 	}
 
-	movieTarget := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Films", "Kimetsu no Yaiba - Mugen Ressha-hen.mkv")
+	movieTarget := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Season 00", "Kimetsu no Yaiba S00E01 - Kimetsu no Yaiba - Mugen Ressha-hen.mkv")
 	if info, err := os.Lstat(movieTarget); err != nil {
 		t.Errorf("movie link not found at %s: %v", movieTarget, err)
 	} else if info.Mode()&os.ModeSymlink == 0 {
@@ -1284,14 +1284,18 @@ func TestKimetsuMovieOnlyWithoutAnyPreviousSeasons(t *testing.T) {
 		t.Fatalf("expected 1 operation in plan, got %d", len(plan))
 	}
 
-	expectedDir := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Films")
+	expectedDir := filepath.Join(jellyLibraryDir, "Клинок, рассекающий демонов", "Season 00")
 	if filepath.Dir(plan[0].TargetPath) != expectedDir {
 		t.Errorf("expected target dir '%s', got '%s'", expectedDir, filepath.Dir(plan[0].TargetPath))
 	}
 
-	expectedFile := "Kimetsu no Yaiba - Mugen Ressha-hen.mkv"
+	expectedFile := "Kimetsu no Yaiba S00E01 - Kimetsu no Yaiba - Mugen Ressha-hen.mkv"
 	if filepath.Base(plan[0].TargetPath) != expectedFile {
 		t.Errorf("expected target file '%s', got '%s'", expectedFile, filepath.Base(plan[0].TargetPath))
+	}
+
+	if plan[0].NfoContent == "" {
+		t.Errorf("expected NfoContent to be generated for movie")
 	}
 
 	err = ApplyPlan(plan, filepath.Join(tmpDir, "state.json"))
@@ -1304,6 +1308,15 @@ func TestKimetsuMovieOnlyWithoutAnyPreviousSeasons(t *testing.T) {
 		t.Errorf("movie link not found at %s: %v", movieTarget, err)
 	} else if info.Mode()&os.ModeSymlink == 0 {
 		t.Errorf("movie target is not a symlink: %s", movieTarget)
+	}
+
+	nfoTarget := filepath.Join(expectedDir, "Kimetsu no Yaiba S00E01 - Kimetsu no Yaiba - Mugen Ressha-hen.nfo")
+	if data, err := os.ReadFile(nfoTarget); err != nil {
+		t.Errorf("nfo file not created at %s: %v", nfoTarget, err)
+	} else {
+		if !strings.Contains(string(data), "<title>Клинок, рассекающий демонов</title>") {
+			t.Errorf("nfo missing expected Russian title, got: %s", string(data))
+		}
 	}
 }
 
@@ -1358,12 +1371,12 @@ func TestBlackCloverRussianDejzDubMovie(t *testing.T) {
 		t.Fatalf("expected 1 operation in plan, got %d", len(plan))
 	}
 
-	expectedDir := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Films")
+	expectedDir := filepath.Join(jellyLibraryDir, "Чёрный клевер", "Season 00")
 	if filepath.Dir(plan[0].TargetPath) != expectedDir {
 		t.Errorf("expected target dir '%s', got '%s'", expectedDir, filepath.Dir(plan[0].TargetPath))
 	}
 
-	expectedFile := "Black Clover - Mahou Tei no Ken.mp4"
+	expectedFile := "Black Clover S00E01 - Black Clover - Mahou Tei no Ken.mp4"
 	if filepath.Base(plan[0].TargetPath) != expectedFile {
 		t.Errorf("expected target file '%s', got '%s'", expectedFile, filepath.Base(plan[0].TargetPath))
 	}
@@ -1379,10 +1392,17 @@ func TestBlackCloverRussianDejzDubMovie(t *testing.T) {
 	} else if info.Mode()&os.ModeSymlink == 0 {
 		t.Errorf("movie target is not a symlink: %s", movieTarget)
 	}
+
+	nfoTarget := filepath.Join(expectedDir, "Black Clover S00E01 - Black Clover - Mahou Tei no Ken.nfo")
+	if data, err := os.ReadFile(nfoTarget); err != nil {
+		t.Errorf("nfo file not created at %s: %v", nfoTarget, err)
+	} else if !strings.Contains(string(data), "<title>Чёрный клевер</title>") {
+		t.Errorf("nfo missing expected Russian title, got: %s", string(data))
+	}
 }
 
-func TestSeparatedShowsAndMoviesDirs(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "jelly-an-li-separated-test")
+func TestSeason00ShowsAndMovies(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jelly-an-li-season00-test")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -1407,11 +1427,9 @@ func TestSeparatedShowsAndMoviesDirs(t *testing.T) {
 	defer restore()
 
 	torrentsDir := filepath.Join(tmpDir, "Torrents")
-	showsDir := filepath.Join(tmpDir, "Anime_Shows")
-	moviesDir := filepath.Join(tmpDir, "Anime_Movies")
+	libraryDir := filepath.Join(tmpDir, "Anime")
 	os.MkdirAll(torrentsDir, 0755)
-	os.MkdirAll(showsDir, 0755)
-	os.MkdirAll(moviesDir, 0755)
+	os.MkdirAll(libraryDir, 0755)
 
 	// Раздача 1: Сериал
 	seriesFolder := filepath.Join(torrentsDir, "[Kawaiika-Raws] (2019) Kimetsu no Yaiba [BDRip 1920x1080 HEVC FLAC]")
@@ -1419,7 +1437,7 @@ func TestSeparatedShowsAndMoviesDirs(t *testing.T) {
 	ep1 := filepath.Join(seriesFolder, "[Kawaiika-Raws] Kimetsu no Yaiba 01.mkv")
 	os.WriteFile(ep1, []byte("ep 1 content"), 0644)
 
-	// Раздача 2: Фильм с внешней аудиодорожкой и субтитрами
+	// Раздача 2: Фильм с внешней аудиодорожкой
 	movieFolder := filepath.Join(torrentsDir, "Kimetsu no Yaiba Movie Mugen Ressha-hen")
 	os.MkdirAll(filepath.Join(movieFolder, "Rus Dub"), 0755)
 	movieVideo := filepath.Join(movieFolder, "Kimetsu no Yaiba Mugen Ressha-hen.mkv")
@@ -1429,8 +1447,7 @@ func TestSeparatedShowsAndMoviesDirs(t *testing.T) {
 
 	cfg := &config.Config{
 		TorrentDirs:      []string{torrentsDir},
-		ShowsDir:         showsDir,
-		MoviesDir:        moviesDir,
+		LibraryDir:       libraryDir,
 		FolderNamingMode: "russian",
 		UseShikimori:     true,
 		LanguageMapping: map[string]string{
@@ -1463,22 +1480,22 @@ func TestSeparatedShowsAndMoviesDirs(t *testing.T) {
 		}
 	}
 
-	// 1. Проверяем путь сериала -> showsDir
+	// 1. Проверяем путь сериала -> Season 01
 	if seriesOp == nil {
 		t.Fatalf("missing series operation")
 	}
-	expectedSeriesPath := filepath.Join(showsDir, "Клинок, рассекающий демонов", "Season 01", "Kimetsu no Yaiba S01E01.mkv")
+	expectedSeriesPath := filepath.Join(libraryDir, "Клинок, рассекающий демонов", "Season 01", "Kimetsu no Yaiba S01E01.mkv")
 	if seriesOp.TargetPath != expectedSeriesPath {
 		t.Errorf("expected series target '%s', got '%s'", expectedSeriesPath, seriesOp.TargetPath)
 	}
 
-	// 2. Проверяем путь фильма -> moviesDir
+	// 2. Проверяем путь фильма -> Season 00
 	if movieVideoOp == nil || movieAudioOp == nil {
 		t.Fatalf("missing movie operations")
 	}
-	expectedMovieFolder := filepath.Join(moviesDir, "Клинок, рассекающий демонов - Поезд «Бесконечный»")
-	expectedMovieVideo := filepath.Join(expectedMovieFolder, "Kimetsu no Yaiba - Mugen Ressha-hen.mkv")
-	expectedMovieAudio := filepath.Join(expectedMovieFolder, "Kimetsu no Yaiba - Mugen Ressha-hen.ru.mka")
+	expectedSeason00Folder := filepath.Join(libraryDir, "Клинок, рассекающий демонов", "Season 00")
+	expectedMovieVideo := filepath.Join(expectedSeason00Folder, "Kimetsu no Yaiba S00E01 - Kimetsu no Yaiba - Mugen Ressha-hen.mkv")
+	expectedMovieAudio := filepath.Join(expectedSeason00Folder, "Kimetsu no Yaiba S00E01 - Kimetsu no Yaiba - Mugen Ressha-hen.ru.mka")
 
 	if movieVideoOp.TargetPath != expectedMovieVideo {
 		t.Errorf("expected movie video target '%s', got '%s'", expectedMovieVideo, movieVideoOp.TargetPath)
@@ -1501,7 +1518,15 @@ func TestSeparatedShowsAndMoviesDirs(t *testing.T) {
 		}
 	}
 
-	// 4. Проверяем CleanBrokenLinks в обеих папках
+	// Проверяем NFO файл
+	nfoPath := filepath.Join(expectedSeason00Folder, "Kimetsu no Yaiba S00E01 - Kimetsu no Yaiba - Mugen Ressha-hen.nfo")
+	if data, err := os.ReadFile(nfoPath); err != nil {
+		t.Errorf("expected NFO file at %s: %v", nfoPath, err)
+	} else if !strings.Contains(string(data), "<title>Клинок, рассекающий демонов: Поезд «Бесконечный»</title>") {
+		t.Errorf("expected NFO title, got: %s", string(data))
+	}
+
+	// 4. Проверяем CleanBrokenLinks
 	os.RemoveAll(movieFolder)
 	cleaned, err := CleanBrokenLinks(cfg, statePath, plan[:1]) // только сериал остался
 	if err != nil {
@@ -1510,12 +1535,9 @@ func TestSeparatedShowsAndMoviesDirs(t *testing.T) {
 	if len(cleaned) == 0 {
 		t.Errorf("expected movie links to be cleaned, got 0")
 	}
-	if _, err := os.Stat(expectedMovieFolder); !os.IsNotExist(err) {
-		t.Errorf("expected movie folder to be cleaned, but still exists: %s", expectedMovieFolder)
-	}
 }
 
-func TestSeparatedMoviesRomajiMode(t *testing.T) {
+func TestMoviesRomajiMode(t *testing.T) {
 	shows := []*parser.AnimeShow{
 		{
 			CleanedName: "Kimetsu no Yaiba Mugen Ressha Hen",
@@ -1532,8 +1554,7 @@ func TestSeparatedMoviesRomajiMode(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		ShowsDir:         "/media/Anime/Shows",
-		MoviesDir:        "/media/Anime/Movies",
+		LibraryDir:       "/media/Anime",
 		FolderNamingMode: "romaji",
 	}
 
@@ -1542,7 +1563,7 @@ func TestSeparatedMoviesRomajiMode(t *testing.T) {
 		t.Fatalf("expected 1 link operation, got %d", len(plan))
 	}
 
-	expectedDir := filepath.Join("/media/Anime/Movies", "Kimetsu no Yaiba - Mugen Ressha-hen")
+	expectedDir := filepath.Join("/media/Anime", "Kimetsu no Yaiba - Mugen Ressha-hen", "Season 00")
 	if filepath.Dir(plan[0].TargetPath) != expectedDir {
 		t.Errorf("expected Romaji movie folder '%s', got '%s'", expectedDir, filepath.Dir(plan[0].TargetPath))
 	}

@@ -2,8 +2,7 @@
   "torrent_dirs": [
     "/torrents/Anime"
   ],
-  "shows_dir": "/media/Anime/Shows",
-  "movies_dir": "/media/Anime/Movies",
+  "library_dir": "/media/Anime",
   "sync_interval_minutes": 5,
   "folder_naming_mode": "russian",
   "proxy_url": "",

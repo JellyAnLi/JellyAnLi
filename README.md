@@ -96,8 +96,7 @@ docker compose up -d
   "torrent_dirs": [
     "/torrents/Anime"
   ],
-  "shows_dir": "/media/Anime/Shows",
-  "movies_dir": "/media/Anime/Movies",
+  "library_dir": "/media/Anime",
   "sync_interval_minutes": 5,
   "folder_naming_mode": "russian",
   "proxy_url": "",
@@ -115,8 +114,7 @@ docker compose up -d
 ```
 
 * `torrent_dirs` — список папок, куда качаются торренты.
-* `shows_dir` — папка медиатеки сериалов в Jellyfin (`Season 01`, `Season 02`...).
-* `movies_dir` — папка медиатеки фильмов в Jellyfin (автоматически связываются плагином TMDb Box Sets).
+* `library_dir` — папка аниме-медиатеки в Jellyfin (сериалы раскладываются по `Season 01`, `Season 02`, а фильмы и спешлы — в `Season 00` с файлами `.nfo`).
 * `sync_interval_minutes` — интервал фоновой проверки новых раздач (в минутах).
 * `folder_naming_mode` — стиль названий папок: `"russian"` (русские), `"romaji"` (ромадзи/английские) или `"original"` (исходные из раздачи).
 * `proxy_url` — прокси для запросов к базам метаданных (`socks5://127.0.0.1:1080`, `socks5h://...`, `http://...`).

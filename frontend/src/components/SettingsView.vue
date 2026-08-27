@@ -36,8 +36,7 @@ const ALL_PROVIDERS = [
 // Локальная копия конфигурации для редактирования
 const form = reactive({
   torrent_dirs: [''],
-  shows_dir: '',
-  movies_dir: '',
+  library_dir: '',
   sync_interval_minutes: 5,
   folder_naming_mode: 'russian',
   use_relative_symlinks: true,
@@ -81,8 +80,7 @@ watch(() => props.config, (cfg) => {
     form.torrent_dirs = Array.isArray(cfg.torrent_dirs) && cfg.torrent_dirs.length > 0
       ? [...cfg.torrent_dirs]
       : ['']
-    form.shows_dir = cfg.shows_dir || cfg.library_dir || ''
-    form.movies_dir = cfg.movies_dir || ''
+    form.library_dir = cfg.library_dir || cfg.shows_dir || ''
     form.sync_interval_minutes = cfg.sync_interval_minutes !== undefined ? cfg.sync_interval_minutes : 5
     form.folder_naming_mode = cfg.folder_naming_mode || 'russian'
     form.use_relative_symlinks = cfg.use_relative_symlinks !== undefined ? cfg.use_relative_symlinks : true
@@ -179,10 +177,8 @@ function openFolderBrowser(field, initialPath = '') {
 }
 
 function handleFolderSelect(selectedPath) {
-  if (currentModalField.value === 'shows_dir') {
-    form.shows_dir = selectedPath
-  } else if (currentModalField.value === 'movies_dir') {
-    form.movies_dir = selectedPath
+  if (currentModalField.value === 'library_dir') {
+    form.library_dir = selectedPath
   } else if (currentModalField.value.startsWith('torrent_dir_')) {
     const index = parseInt(currentModalField.value.replace('torrent_dir_', ''), 10)
     if (!isNaN(index) && index >= 0 && index < form.torrent_dirs.length) {
@@ -216,8 +212,7 @@ function handleSave() {
 
   emit('save', {
     torrent_dirs: cleanDirs.length > 0 ? cleanDirs : [''],
-    shows_dir: form.shows_dir.trim(),
-    movies_dir: form.movies_dir.trim(),
+    library_dir: form.library_dir.trim(),
     sync_interval_minutes: form.sync_interval_minutes,
     folder_naming_mode: form.folder_naming_mode,
     metadata_providers: activeProviders,
@@ -295,20 +290,20 @@ function handleSave() {
   <!-- Карточка: Медиатека Jellyfin -->
   <div class="card">
     <div class="card-title">Медиатека Jellyfin</div>
-    <div class="card-subtitle">Конечные директории для сериалов и фильмов (для интеграции с Jellyfin и TMDb Box Sets)</div>
+    <div class="card-subtitle">Конечная директория для аниме-библиотеки в Jellyfin</div>
 
     <div class="form-group">
-      <label class="form-label">📺 Папка для аниме-сериалов (Медиатека «Сериалы» в Jellyfin):</label>
+      <label class="form-label">Папка медиатеки аниме в Jellyfin:</label>
       <div class="input-row">
         <input
           type="text"
-          v-model="form.shows_dir"
-          placeholder="/path/to/jellyfin/anime-shows"
+          v-model="form.library_dir"
+          placeholder="/path/to/jellyfin/anime"
         />
         <button
           class="btn-icon"
-          @click="openFolderBrowser('shows_dir', form.shows_dir)"
-          title="Выбрать папку сериалов"
+          @click="openFolderBrowser('library_dir', form.library_dir)"
+          title="Выбрать папку медиатеки"
           type="button"
         >
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -317,31 +312,7 @@ function handleSave() {
         </button>
       </div>
       <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">
-        Здесь создаются папки сериалов с разбивкой по сезонам (<code>Season 01</code>, <code>Season 02</code>).
-      </p>
-    </div>
-
-    <div class="form-group" style="margin-top: 14px;">
-      <label class="form-label">🎬 Папка для полнометражных фильмов (Медиатека «Фильмы» в Jellyfin):</label>
-      <div class="input-row">
-        <input
-          type="text"
-          v-model="form.movies_dir"
-          placeholder="/path/to/jellyfin/anime-movies"
-        />
-        <button
-          class="btn-icon"
-          @click="openFolderBrowser('movies_dir', form.movies_dir)"
-          title="Выбрать папку фильмов"
-          type="button"
-        >
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
-        </button>
-      </div>
-      <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">
-        Здесь создаются отдельные папки для каждого фильма (<code>Название Фильма / Фильм.mkv</code>). Плагин <b>TMDb Box Sets</b> в Jellyfin автоматически объединит фильм и сериал в общую коллекцию по идентификаторам TMDb.
+        Здесь создаются папки тайтлов: сериалы раскладываются по сезонам (<code>Season 01</code>, <code>Season 02</code>), а полнометражные фильмы и спешлы — в <code>Season 00</code> с автоматической генерацией <code>.nfo</code> описаний для Jellyfin.
       </p>
     </div>
 
@@ -352,7 +323,7 @@ function handleSave() {
         <line x1="12" y1="16" x2="12.01" y2="16"></line>
       </svg>
       <div class="notice-text">
-        <strong>Внимание:</strong> В обеих папках порядок полностью наводит JellyAnLi. Сервис автоматически удаляет недействительные симлинки, устаревшие ссылки и пустые каталоги.
+        <strong>Внимание:</strong> В этой папке порядок полностью наводит JellyAnLi. Сервис автоматически удаляет недействительные симлинки, устаревшие ссылки и пустые каталоги.
       </div>
     </div>
   </div>
