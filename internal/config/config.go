@@ -42,7 +42,9 @@ func (pr *ProxyRouting) GetProxyFor(providerID string) string {
 // Config представляет структуру конфигурационного файла config.json
 type Config struct {
 	TorrentDirs         []string          `json:"torrent_dirs"`
-	LibraryDir          string            `json:"library_dir"`
+	ShowsDir            string            `json:"shows_dir,omitempty"`
+	MoviesDir           string            `json:"movies_dir,omitempty"`
+	LibraryDir          string            `json:"library_dir,omitempty"` // legacy fallback
 	SyncIntervalMinutes int               `json:"sync_interval_minutes"`
 	LanguageMapping     map[string]string `json:"language_mapping"`
 	MetadataProviders   []string          `json:"metadata_providers"` // ["shikimori", "anilist", "anidb"]
@@ -56,6 +58,23 @@ type Config struct {
 	TorrentDir        string `json:"torrent_dir,omitempty"`
 	JellyfinShowsDir  string `json:"jellyfin_shows_dir,omitempty"`
 	JellyfinMoviesDir string `json:"jellyfin_movies_dir,omitempty"`
+}
+
+func (c *Config) GetShowsDir() string {
+	if c == nil {
+		return ""
+	}
+	if c.ShowsDir != "" {
+		return c.ShowsDir
+	}
+	return c.LibraryDir
+}
+
+func (c *Config) GetMoviesDir() string {
+	if c == nil {
+		return ""
+	}
+	return c.MoviesDir
 }
 
 // NewDefaultConfig создает конфигурацию по умолчанию
@@ -147,16 +166,20 @@ func Load(configPath string) (*Config, error) {
 	if len(cfg.TorrentDirs) == 0 && cfg.TorrentDir != "" {
 		cfg.TorrentDirs = []string{cfg.TorrentDir}
 	}
-	if cfg.LibraryDir == "" {
-		if cfg.JellyfinShowsDir != "" {
-			cfg.LibraryDir = cfg.JellyfinShowsDir
-		} else if cfg.JellyfinMoviesDir != "" {
-			cfg.LibraryDir = cfg.JellyfinMoviesDir
+	if cfg.ShowsDir == "" {
+		if cfg.LibraryDir != "" {
+			cfg.ShowsDir = cfg.LibraryDir
+		} else if cfg.JellyfinShowsDir != "" {
+			cfg.ShowsDir = cfg.JellyfinShowsDir
 		}
+	}
+	if cfg.MoviesDir == "" && cfg.JellyfinMoviesDir != "" {
+		cfg.MoviesDir = cfg.JellyfinMoviesDir
 	}
 
 	// Сбрасываем старые поля
 	cfg.TorrentDir = ""
+	cfg.LibraryDir = ""
 	cfg.JellyfinShowsDir = ""
 	cfg.JellyfinMoviesDir = ""
 
@@ -167,6 +190,7 @@ func Load(configPath string) (*Config, error) {
 func (c *Config) Save(configPath string) error {
 	// Сбрасываем старые поля перед сохранением, чтобы они не попали в файл
 	c.TorrentDir = ""
+	c.LibraryDir = ""
 	c.JellyfinShowsDir = ""
 	c.JellyfinMoviesDir = ""
 

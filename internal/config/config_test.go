@@ -32,7 +32,8 @@ func TestConfigLoadSave(t *testing.T) {
 
 	// Тест 2: Сохранение измененной конфигурации
 	cfg.TorrentDirs = []string{"/path/to/torrent"}
-	cfg.LibraryDir = "/path/to/library"
+	cfg.ShowsDir = "/path/to/shows"
+	cfg.MoviesDir = "/path/to/movies"
 	cfg.SyncIntervalMinutes = 10
 	err = cfg.Save(configPath)
 	if err != nil {
@@ -47,8 +48,11 @@ func TestConfigLoadSave(t *testing.T) {
 	if len(cfg2.TorrentDirs) != 1 || cfg2.TorrentDirs[0] != "/path/to/torrent" {
 		t.Errorf("expected TorrentDirs '/path/to/torrent', got '%v'", cfg2.TorrentDirs)
 	}
-	if cfg2.LibraryDir != "/path/to/library" {
-		t.Errorf("expected LibraryDir '/path/to/library', got '%s'", cfg2.LibraryDir)
+	if cfg2.ShowsDir != "/path/to/shows" || cfg2.GetShowsDir() != "/path/to/shows" {
+		t.Errorf("expected ShowsDir '/path/to/shows', got '%s'", cfg2.ShowsDir)
+	}
+	if cfg2.MoviesDir != "/path/to/movies" || cfg2.GetMoviesDir() != "/path/to/movies" {
+		t.Errorf("expected MoviesDir '/path/to/movies', got '%s'", cfg2.MoviesDir)
 	}
 	if cfg2.SyncIntervalMinutes != 10 {
 		t.Errorf("expected SyncIntervalMinutes 10, got %d", cfg2.SyncIntervalMinutes)
@@ -85,6 +89,35 @@ func TestConfigLoadSave(t *testing.T) {
 	}
 	if cfg3.ProxyRouting.GetProxyFor("shikimori") != "" {
 		t.Errorf("expected empty proxy URL for shikimori")
+	}
+}
+
+func TestLegacyConfigMigration(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jelly-an-li-legacy-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	legacyJSON := `{
+		"torrent_dirs": ["/torrents"],
+		"library_dir": "/legacy_library",
+		"sync_interval_minutes": 15
+	}`
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(legacyJSON), 0644); err != nil {
+		t.Fatalf("failed to write legacy config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("failed to load legacy config: %v", err)
+	}
+	if cfg.ShowsDir != "/legacy_library" {
+		t.Errorf("expected ShowsDir migrated from library_dir, got '%s'", cfg.ShowsDir)
+	}
+	if cfg.GetShowsDir() != "/legacy_library" {
+		t.Errorf("expected GetShowsDir to return '/legacy_library', got '%s'", cfg.GetShowsDir())
 	}
 }
 

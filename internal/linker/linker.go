@@ -318,7 +318,7 @@ func AlignShowsPartEpisodes(shows []*parser.AnimeShow, cfg *config.Config) {
 	filesBySeason := make(map[seasonKey][]*parser.EpisodeFile)
 
 	for _, show := range shows {
-		showFolder := resolveShowFolderName(show, shows, cfg.LibraryDir, cfg.FolderNamingMode)
+		showFolder := resolveShowFolderName(show, shows, cfg.GetShowsDir(), cfg.FolderNamingMode)
 		for _, f := range show.Files {
 			key := seasonKey{
 				showFolder: showFolder,
@@ -370,6 +370,9 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 	var plan []*LinkOperation
 	usedTargets := make(map[string]string)
 
+	showsDir := cfg.GetShowsDir()
+	moviesDir := cfg.GetMoviesDir()
+
 	// Считаем максимальный номер эпизода для каждого сезона сериала, чтобы корректно форматировать S01E001 или S01E01
 	type seasonKey struct {
 		showFolder string
@@ -377,7 +380,7 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 	}
 	maxEpBySeason := make(map[seasonKey]int)
 	for _, show := range shows {
-		showFolder := resolveShowFolderName(show, shows, cfg.LibraryDir, cfg.FolderNamingMode)
+		showFolder := resolveShowFolderName(show, shows, showsDir, cfg.FolderNamingMode)
 		for _, file := range show.Files {
 			if !show.IsMovie && file.EpisodeNum > 0 {
 				key := seasonKey{showFolder: showFolder, seasonNum: file.SeasonNum}
@@ -389,7 +392,7 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 	}
 
 	for _, show := range shows {
-		showFolder := resolveShowFolderName(show, shows, cfg.LibraryDir, cfg.FolderNamingMode)
+		showFolder := resolveShowFolderName(show, shows, showsDir, cfg.FolderNamingMode)
 		englishShowTitle := resolveEnglishShowName(show, shows)
 
 		for _, file := range show.Files {
@@ -397,8 +400,14 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 				continue
 			}
 
-			if cfg.LibraryDir == "" {
-				continue
+			if show.IsMovie {
+				if moviesDir == "" && showsDir == "" {
+					continue
+				}
+			} else {
+				if showsDir == "" {
+					continue
+				}
 			}
 
 			var targetDir string
@@ -411,9 +420,6 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 			}
 
 			if show.IsMovie {
-				// Кладем фильм во вложенную папку "Films" в папке аниме
-				targetDir = filepath.Join(cfg.LibraryDir, showFolder, "Films")
-
 				movieTitle := show.CleanedName
 				if show.RomajiName != "" && show.RomajiName != englishShowTitle {
 					movieTitle = show.RomajiName
@@ -422,6 +428,28 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 					movieTitle = fileTitle
 				}
 				movieTitle = sanitizeFileName(movieTitle)
+
+				if moviesDir != "" {
+					// Выделенная папка для фильмов
+					movieFolderName := show.CleanedName
+					switch strings.ToLower(cfg.FolderNamingMode) {
+					case "romaji", "english", "en":
+						if show.RomajiName != "" {
+							movieFolderName = show.RomajiName
+						}
+					case "original", "orig":
+						movieFolderName = show.CleanedName
+					case "russian", "ru", "":
+						if show.RussianName != "" {
+							movieFolderName = show.RussianName
+						}
+					}
+					movieFolderName = sanitizeFileName(movieFolderName)
+					targetDir = filepath.Join(moviesDir, movieFolderName)
+				} else {
+					// Обратная совместимость: вложенная папка Films внутри сериалов
+					targetDir = filepath.Join(showsDir, showFolder, "Films")
+				}
 
 				if file.Type == parser.TypeVideo {
 					targetName = movieTitle + ext
@@ -437,7 +465,7 @@ func GeneratePlan(shows []*parser.AnimeShow, cfg *config.Config) []*LinkOperatio
 				}
 			} else {
 				// Кладем сериал в "Season XX"
-				targetDir = filepath.Join(cfg.LibraryDir, showFolder, fmt.Sprintf("Season %02d", file.SeasonNum))
+				targetDir = filepath.Join(showsDir, showFolder, fmt.Sprintf("Season %02d", file.SeasonNum))
 
 				if file.EpisodeNum != -1 {
 					key := seasonKey{showFolder: showFolder, seasonNum: file.SeasonNum}
@@ -671,7 +699,13 @@ func CleanBrokenLinks(cfg *config.Config, statePath string, activePlan ...[]*Lin
 		}
 	}
 
-	dirsToClean := []string{cfg.LibraryDir}
+	dirsToClean := []string{}
+	if showsDir := cfg.GetShowsDir(); showsDir != "" {
+		dirsToClean = append(dirsToClean, showsDir)
+	}
+	if moviesDir := cfg.GetMoviesDir(); moviesDir != "" && filepath.Clean(moviesDir) != filepath.Clean(cfg.GetShowsDir()) {
+		dirsToClean = append(dirsToClean, moviesDir)
+	}
 
 	for _, dir := range dirsToClean {
 		if dir == "" {

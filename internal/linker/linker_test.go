@@ -1381,6 +1381,173 @@ func TestBlackCloverRussianDejzDubMovie(t *testing.T) {
 	}
 }
 
+func TestSeparatedShowsAndMoviesDirs(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jelly-an-li-separated-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	restore := providers.SetShikimoriCacheForTest(map[string]providers.CachedShikimoriInfo{
+		"Kimetsu no Yaiba": {
+			Russian:   "Клинок, рассекающий демонов",
+			Romaji:    "Kimetsu no Yaiba",
+			Season:    1,
+			IsMovie:   false,
+			IsSpecial: false,
+		},
+		"Kimetsu no Yaiba Movie Mugen Ressha hen": {
+			Russian:   "Клинок, рассекающий демонов: Поезд «Бесконечный»",
+			Romaji:    "Kimetsu no Yaiba: Mugen Ressha-hen",
+			Season:    1,
+			IsMovie:   true,
+			IsSpecial: false,
+		},
+	})
+	defer restore()
+
+	torrentsDir := filepath.Join(tmpDir, "Torrents")
+	showsDir := filepath.Join(tmpDir, "Anime_Shows")
+	moviesDir := filepath.Join(tmpDir, "Anime_Movies")
+	os.MkdirAll(torrentsDir, 0755)
+	os.MkdirAll(showsDir, 0755)
+	os.MkdirAll(moviesDir, 0755)
+
+	// Раздача 1: Сериал
+	seriesFolder := filepath.Join(torrentsDir, "[Kawaiika-Raws] (2019) Kimetsu no Yaiba [BDRip 1920x1080 HEVC FLAC]")
+	os.MkdirAll(seriesFolder, 0755)
+	ep1 := filepath.Join(seriesFolder, "[Kawaiika-Raws] Kimetsu no Yaiba 01.mkv")
+	os.WriteFile(ep1, []byte("ep 1 content"), 0644)
+
+	// Раздача 2: Фильм с внешней аудиодорожкой и субтитрами
+	movieFolder := filepath.Join(torrentsDir, "Kimetsu no Yaiba Movie Mugen Ressha-hen")
+	os.MkdirAll(filepath.Join(movieFolder, "Rus Dub"), 0755)
+	movieVideo := filepath.Join(movieFolder, "Kimetsu no Yaiba Mugen Ressha-hen.mkv")
+	movieAudio := filepath.Join(movieFolder, "Rus Dub", "Kimetsu no Yaiba Mugen Ressha-hen.mka")
+	os.WriteFile(movieVideo, []byte("movie video"), 0644)
+	os.WriteFile(movieAudio, []byte("movie audio"), 0644)
+
+	cfg := &config.Config{
+		TorrentDirs:      []string{torrentsDir},
+		ShowsDir:         showsDir,
+		MoviesDir:        moviesDir,
+		FolderNamingMode: "russian",
+		UseShikimori:     true,
+		LanguageMapping: map[string]string{
+			"Rus Dub": "ru",
+		},
+	}
+
+	shows, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if len(shows) != 2 {
+		t.Fatalf("expected 2 shows scanned, got %d", len(shows))
+	}
+
+	plan := GeneratePlan(shows, cfg)
+	if len(plan) != 3 {
+		t.Fatalf("expected 3 operations in plan (1 series + 1 movie video + 1 movie audio), got %d", len(plan))
+	}
+
+	var seriesOp, movieVideoOp, movieAudioOp *LinkOperation
+	for _, op := range plan {
+		if op.SourcePath == ep1 {
+			seriesOp = op
+		} else if op.SourcePath == movieVideo {
+			movieVideoOp = op
+		} else if op.SourcePath == movieAudio {
+			movieAudioOp = op
+		}
+	}
+
+	// 1. Проверяем путь сериала -> showsDir
+	if seriesOp == nil {
+		t.Fatalf("missing series operation")
+	}
+	expectedSeriesPath := filepath.Join(showsDir, "Клинок, рассекающий демонов", "Season 01", "Kimetsu no Yaiba S01E01.mkv")
+	if seriesOp.TargetPath != expectedSeriesPath {
+		t.Errorf("expected series target '%s', got '%s'", expectedSeriesPath, seriesOp.TargetPath)
+	}
+
+	// 2. Проверяем путь фильма -> moviesDir
+	if movieVideoOp == nil || movieAudioOp == nil {
+		t.Fatalf("missing movie operations")
+	}
+	expectedMovieFolder := filepath.Join(moviesDir, "Клинок, рассекающий демонов - Поезд «Бесконечный»")
+	expectedMovieVideo := filepath.Join(expectedMovieFolder, "Kimetsu no Yaiba - Mugen Ressha-hen.mkv")
+	expectedMovieAudio := filepath.Join(expectedMovieFolder, "Kimetsu no Yaiba - Mugen Ressha-hen.ru.mka")
+
+	if movieVideoOp.TargetPath != expectedMovieVideo {
+		t.Errorf("expected movie video target '%s', got '%s'", expectedMovieVideo, movieVideoOp.TargetPath)
+	}
+	if movieAudioOp.TargetPath != expectedMovieAudio {
+		t.Errorf("expected movie audio target '%s', got '%s'", expectedMovieAudio, movieAudioOp.TargetPath)
+	}
+
+	// 3. Применяем план
+	statePath := filepath.Join(tmpDir, "state.json")
+	if err := ApplyPlan(plan, statePath, cfg); err != nil {
+		t.Fatalf("ApplyPlan failed: %v", err)
+	}
+
+	for _, op := range plan {
+		if info, err := os.Lstat(op.TargetPath); err != nil {
+			t.Errorf("symlink not found at %s: %v", op.TargetPath, err)
+		} else if info.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("path is not a symlink: %s", op.TargetPath)
+		}
+	}
+
+	// 4. Проверяем CleanBrokenLinks в обеих папках
+	os.RemoveAll(movieFolder)
+	cleaned, err := CleanBrokenLinks(cfg, statePath, plan[:1]) // только сериал остался
+	if err != nil {
+		t.Fatalf("CleanBrokenLinks failed: %v", err)
+	}
+	if len(cleaned) == 0 {
+		t.Errorf("expected movie links to be cleaned, got 0")
+	}
+	if _, err := os.Stat(expectedMovieFolder); !os.IsNotExist(err) {
+		t.Errorf("expected movie folder to be cleaned, but still exists: %s", expectedMovieFolder)
+	}
+}
+
+func TestSeparatedMoviesRomajiMode(t *testing.T) {
+	shows := []*parser.AnimeShow{
+		{
+			CleanedName: "Kimetsu no Yaiba Mugen Ressha Hen",
+			RussianName: "Клинок, рассекающий демонов: Поезд «Бесконечный»",
+			RomajiName:  "Kimetsu no Yaiba: Mugen Ressha-hen",
+			IsMovie:     true,
+			Files: []*parser.EpisodeFile{
+				{
+					SourcePath: "/torrents/movie.mkv",
+					Type:       parser.TypeVideo,
+				},
+			},
+		},
+	}
+
+	cfg := &config.Config{
+		ShowsDir:         "/media/Anime/Shows",
+		MoviesDir:        "/media/Anime/Movies",
+		FolderNamingMode: "romaji",
+	}
+
+	plan := GeneratePlan(shows, cfg)
+	if len(plan) != 1 {
+		t.Fatalf("expected 1 link operation, got %d", len(plan))
+	}
+
+	expectedDir := filepath.Join("/media/Anime/Movies", "Kimetsu no Yaiba - Mugen Ressha-hen")
+	if filepath.Dir(plan[0].TargetPath) != expectedDir {
+		t.Errorf("expected Romaji movie folder '%s', got '%s'", expectedDir, filepath.Dir(plan[0].TargetPath))
+	}
+}
+
 
 
 

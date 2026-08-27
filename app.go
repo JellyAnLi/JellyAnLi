@@ -219,6 +219,8 @@ func (a *App) SaveConfig(newCfg *config.Config) error {
 	}
 
 	a.config.TorrentDirs = newCfg.TorrentDirs
+	a.config.ShowsDir = newCfg.ShowsDir
+	a.config.MoviesDir = newCfg.MoviesDir
 	a.config.LibraryDir = newCfg.LibraryDir
 	a.config.SyncIntervalMinutes = newCfg.SyncIntervalMinutes
 	a.config.MetadataProviders = newCfg.MetadataProviders
@@ -408,9 +410,21 @@ func naturalLess(s1, s2 string) bool {
 }
 
 func (a *App) relTarget(targetPath string) string {
-	if a.config != nil && a.config.LibraryDir != "" {
-		if rel, err := filepath.Rel(a.config.LibraryDir, targetPath); err == nil && !strings.HasPrefix(rel, "..") {
-			return rel
+	if a.config != nil {
+		if a.config.ShowsDir != "" {
+			if rel, err := filepath.Rel(a.config.ShowsDir, targetPath); err == nil && !strings.HasPrefix(rel, "..") {
+				return rel
+			}
+		}
+		if a.config.MoviesDir != "" {
+			if rel, err := filepath.Rel(a.config.MoviesDir, targetPath); err == nil && !strings.HasPrefix(rel, "..") {
+				return rel
+			}
+		}
+		if a.config.LibraryDir != "" {
+			if rel, err := filepath.Rel(a.config.LibraryDir, targetPath); err == nil && !strings.HasPrefix(rel, "..") {
+				return rel
+			}
 		}
 	}
 	return filepath.Base(targetPath)
@@ -458,8 +472,8 @@ func (a *App) RunSync(dryRun bool, isBackground ...bool) {
 		return
 	}
 
-	if a.config.LibraryDir == "" {
-		a.log("Ошибка: Не указана библиотека Jellyfin.")
+	if a.config.GetShowsDir() == "" && a.config.GetMoviesDir() == "" {
+		a.log("Ошибка: Не указана папка медиатеки (сериалы или фильмы).")
 		return
 	}
 
@@ -512,7 +526,7 @@ func (a *App) RunSync(dryRun bool, isBackground ...bool) {
 				fileName = strings.Join(parts[2:], "/")
 			} else if len(parts) == 2 {
 				showName = parts[0]
-				seasonName = "Корневые файлы"
+				seasonName = "Фильм"
 				fileName = parts[1]
 			}
 
