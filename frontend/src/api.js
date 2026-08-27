@@ -44,6 +44,12 @@ export async function GetStatus() {
   return data.syncing // true или false
 }
 
+export async function GetVersion(force = false) {
+  const res = await fetch(`/api/version${force ? '?force=true' : ''}`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
 export async function Browse(path = '') {
   const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`)
   if (!res.ok) throw new Error(await res.text())

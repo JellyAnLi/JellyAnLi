@@ -2,12 +2,18 @@
 import {ref, onMounted, onUnmounted, nextTick} from 'vue'
 import SettingsView from './components/SettingsView.vue'
 import LogsView from './components/LogsView.vue'
-import { GetConfig, SaveConfig, RunSync, GetLogs, ClearLogs, subscribeEvents } from './api.js'
+import { GetConfig, SaveConfig, RunSync, GetLogs, ClearLogs, GetVersion, subscribeEvents } from './api.js'
 
 const activeTab = ref('settings')
 const syncing = ref(false)
 const serverOnline = ref(true)
 const logs = ref([])
+const versionInfo = ref({
+  current_version: 'v1.0.0',
+  latest_version: 'v1.0.0',
+  has_update: false,
+  release_url: 'https://github.com/JellyAnLi/JellyAnLi/releases'
+})
 const config = ref({
   torrent_dirs: [],
   library_dir: '',
@@ -49,6 +55,18 @@ async function loadLogs() {
     }
   } catch (e) {
     console.error('Ошибка загрузки логов:', e)
+  }
+}
+
+// Загрузка информации о версии и обновлениях
+async function loadVersion() {
+  try {
+    const info = await GetVersion()
+    if (info) {
+      versionInfo.value = info
+    }
+  } catch (e) {
+    /* ignore offline */
   }
 }
 
@@ -142,6 +160,7 @@ onMounted(async () => {
 
   await loadConfig()
   await loadLogs()
+  await loadVersion()
 
   // Real-time стриминг логов и статуса через единый Server-Sent Events канал
   unsubscribeEvents = subscribeEvents({
@@ -153,6 +172,7 @@ onMounted(async () => {
         // Тихо обновляем данные без перезагрузки всей страницы
         await loadConfig()
         await loadLogs()
+        await loadVersion()
       }
     },
     onDisconnected: () => {
@@ -347,11 +367,24 @@ onUnmounted(() => {
         </div>
         
         <div class="sidebar-footer-links">
-          <a href="https://github.com/JellyAnLi/JellyAnLi" target="_blank" rel="noopener noreferrer" class="footer-github-link">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <a
+            :href="versionInfo.has_update ? versionInfo.release_url : 'https://github.com/JellyAnLi/JellyAnLi'"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-github-link"
+            :class="{ 'has-update': versionInfo.has_update }"
+            :title="versionInfo.has_update ? `Доступна новая версия ${versionInfo.latest_version}! Нажмите, чтобы открыть релиз` : 'Репозиторий проекта на GitHub'"
+          >
+            <div v-if="versionInfo.has_update" class="update-dot"></div>
+            <svg v-else class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
             </svg>
-            <span>GitHub v1.0.0</span>
+            <span v-if="versionInfo.has_update">
+              {{ versionInfo.current_version }} → <b>{{ versionInfo.latest_version }} 🔥</b>
+            </span>
+            <span v-else>
+              GitHub {{ versionInfo.current_version }}
+            </span>
           </a>
         </div>
       </div>

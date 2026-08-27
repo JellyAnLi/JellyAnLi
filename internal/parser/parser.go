@@ -42,8 +42,10 @@ var (
 	// Регулярные выражения для очистки скобок и мусора
 	bracketsRegex = regexp.MustCompile(`\[[^\]]*\]|\([^\)]*\)`)
 	spacesRegex   = regexp.MustCompile(`\s+`)
-	garbageRegex  = regexp.MustCompile(`(?i)\b(1080p|720p|480p|bdrip|web-dl|webrip|web|h264|h265|hevc|x264|x265|avc|aac|flac|mp3|dual-audio|multi-audio|rus|eng|jpn|raw|sub|dub|cr|crunchyroll|netflix|rutracker|nnmclub|mp4|mkv|avi|tag)\b`)
-	releaseGroupPrefixRegex = regexp.MustCompile(`^(?i)(erai-raws|subsplease|horriblesubs|erai_raws|judas|cleo|pas|ember|reaktor|asw|chibi|kametsu)[-._\s]+`)
+	garbageRegex  = regexp.MustCompile(`(?i)\b(1080p|720p|480p|bdrip|web-dl|webrip|web|h264|h265|hevc|x264|x265|avc|aac|flac|mp3|dual-audio|multi-audio|rus|eng|jpn|raw|sub|dub|cr|crunchyroll|netflix|rutracker|nnmclub|mp4|mkv|avi|tag|19\d{2}|20\d{2}|erai-raws|subsplease|horriblesubs|judas|cleo|pas|ember|reaktor|asw|chibi|kametsu|vcb-studio|moozzi2|sofcj-raws|kawaiika-raws|varyg|jannyy)\b`)
+	releaseGroupPrefixRegex = regexp.MustCompile(`^(?i)(?:erai-raws|subsplease|horriblesubs|erai_raws|judas|cleo|pas|ember|reaktor|asw|chibi|kametsu|vcb-studio|moozzi2|sofcj-raws|kawaiika-raws|varyg)[-._\s]+`)
+	moviePrefixRegex        = regexp.MustCompile(`^(?i)(?:eiga|gekijouban|gekijou-ban|movie|фильм)[-._\s]+`)
+	movieKeywordsRegex      = regexp.MustCompile(`(?i)(?:\b(?:movie|film|films|фильм|фильмы|gekijouban|gekijou-ban|eiga)\b|g劇)`)
 
 	// Регулярные выражения для извлечения сезона
 	seasonRegexes = []*regexp.Regexp{
@@ -124,7 +126,9 @@ func parseRomanNumeral(s string) int {
 func CleanShowName(folderName string) string {
 	orig := folderName
 
-	name := bracketsRegex.ReplaceAllString(folderName, " ")
+	name := releaseGroupPrefixRegex.ReplaceAllString(folderName, "")
+	name = bracketsRegex.ReplaceAllString(name, " ")
+	name = moviePrefixRegex.ReplaceAllString(name, "")
 	name = extraTagsRegex.ReplaceAllString(name, " ")
 
 	for _, re := range seasonRegexes {
@@ -153,6 +157,7 @@ func CleanShowName(folderName string) string {
 func ExtractShowNameFromFile(fileName string) string {
 	base := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 	base = releaseGroupPrefixRegex.ReplaceAllString(base, "")
+	base = moviePrefixRegex.ReplaceAllString(base, "")
 	name := bracketsRegex.ReplaceAllString(base, " ")
 	name = extraTagsRegex.ReplaceAllString(name, " ")
 
@@ -191,8 +196,9 @@ func ExtractShowNameFromFile(fileName string) string {
 
 // CleanQueryForSearch очищает поисковый запрос от мусора, скобок и тегов
 func CleanQueryForSearch(query string) string {
-	cleaned := bracketsRegex.ReplaceAllString(query, " ")
-	cleaned = releaseGroupPrefixRegex.ReplaceAllString(cleaned, " ")
+	cleaned := releaseGroupPrefixRegex.ReplaceAllString(query, " ")
+	cleaned = bracketsRegex.ReplaceAllString(cleaned, " ")
+	cleaned = moviePrefixRegex.ReplaceAllString(cleaned, " ")
 	cleaned = garbageRegex.ReplaceAllString(cleaned, " ")
 	cleaned = extraTagsRegex.ReplaceAllString(cleaned, " ")
 	cleaned = spacesRegex.ReplaceAllString(cleaned, " ")
@@ -256,11 +262,7 @@ func ExtractPart(s string) int {
 
 // IsMovieFolder определяет, является ли папка фильмом по ключевым словам
 func IsMovieFolder(folderName string) bool {
-	lower := strings.ToLower(folderName)
-	return strings.Contains(lower, "movie") ||
-		strings.Contains(lower, "фильм") ||
-		strings.Contains(lower, "gekijouban") ||
-		strings.Contains(lower, "g劇")
+	return movieKeywordsRegex.MatchString(folderName)
 }
 
 // ClassifyFileType определяет тип файла по его расширению
@@ -734,6 +736,7 @@ func ParseShowFolder(folderName string, relFiles []string, languageMapping map[s
 
 func normalizeForCompare(s string) string {
 	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, "ё", "е")
 	s = strings.ReplaceAll(s, " ", "")
 	s = strings.ReplaceAll(s, "-", "")
 	s = strings.ReplaceAll(s, "_", "")

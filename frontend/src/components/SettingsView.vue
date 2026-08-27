@@ -1,6 +1,7 @@
 <script setup>
-import { reactive, watch, ref } from 'vue'
+import { reactive, watch, ref, onMounted } from 'vue'
 import FolderBrowserModal from './FolderBrowserModal.vue'
+import { GetVersion } from '../api.js'
 
 const props = defineProps({
   config: {
@@ -52,6 +53,26 @@ const form = reactive({
 const isModalShow = ref(false)
 const currentModalField = ref(null)
 const currentModalInitialPath = ref('')
+
+// Состояние проверки обновлений
+const versionData = ref(null)
+const checkingUpdate = ref(false)
+
+async function checkUpdates(force = true) {
+  checkingUpdate.value = true
+  try {
+    const data = await GetVersion(force)
+    if (data) versionData.value = data
+  } catch (e) {
+    /* ignore */
+  } finally {
+    checkingUpdate.value = false
+  }
+}
+
+onMounted(() => {
+  checkUpdates(false)
+})
 
 // Синхронизируем при изменении props
 watch(() => props.config, (cfg) => {
@@ -506,6 +527,59 @@ function handleSave() {
         />
         <span class="input-suffix">минут (0 для отключения фонового таймера)</span>
       </div>
+    </div>
+  </div>
+
+  <!-- Карточка: О программе и обновления -->
+  <div class="card" v-if="versionData">
+    <div class="card-title" style="display: flex; align-items: center; justify-content: space-between;">
+      <span>О программе и обновления</span>
+      <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">
+        Текущая версия: <b>{{ versionData.current_version }}</b>
+      </span>
+    </div>
+    <div class="card-subtitle">Проверка релизов на GitHub и статус обновлений</div>
+
+    <div v-if="versionData.has_update" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 14px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <div>
+          <div style="font-weight: 600; color: #fbbf24; font-size: 13.5px;">
+            🎉 Доступна новая версия: {{ versionData.latest_version }}!
+          </div>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+            Рекомендуется обновиться для получения свежих исправлений и улучшений.
+          </div>
+        </div>
+        <a
+          :href="versionData.release_url || 'https://github.com/JellyAnLi/JellyAnLi/releases'"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-primary"
+          style="padding: 6px 14px; font-size: 12px; text-decoration: none;"
+        >
+          Открыть релиз на GitHub ➔
+        </a>
+      </div>
+      <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 8px; border-top: 1px solid rgba(245, 158, 11, 0.2); padding-top: 6px;">
+        💡 <b>Как обновить:</b> В Docker выполните <code>docker compose pull && docker compose up -d</code> (или настройте <b>Watchtower</b> для фонового автообновления контейнеров). Для бинарников — скачайте свежий архив со страницы релиза.
+      </div>
+    </div>
+
+    <div v-else style="display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--text-secondary); padding: 6px 0;">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span style="color: var(--success); font-size: 14px;">✓</span>
+        <span>У вас установлена актуальная версия ({{ versionData.current_version }}).</span>
+      </div>
+      <button
+        class="btn btn-secondary"
+        @click="checkUpdates(true)"
+        :disabled="checkingUpdate"
+        type="button"
+        style="padding: 5px 12px; font-size: 11.5px;"
+      >
+        <span v-if="checkingUpdate" class="spinner" style="width: 12px; height: 12px; margin-right: 4px;"></span>
+        {{ checkingUpdate ? 'Проверка...' : 'Проверить снова' }}
+      </button>
     </div>
   </div>
 
