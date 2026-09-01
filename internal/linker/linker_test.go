@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"jelly-an-li/internal/config"
@@ -1702,6 +1703,109 @@ func TestEightySixLinkerPlan(t *testing.T) {
 	expectedPart2Video := filepath.Join(expectedDir, "86 S01E02.mkv")
 	if fullPlan[3].TargetPath != expectedPart2Video {
 		t.Errorf("expected Part 2 first episode to be '%s', got '%s'", expectedPart2Video, fullPlan[3].TargetPath)
+	}
+}
+
+func TestEightySixFullScanFromInputLog(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jelly-an-li-86-full-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	restore := providers.SetShikimoriCacheForTest(map[string]providers.CachedShikimoriInfo{
+		"86 Eighty Six": {
+			Russian: "Восемьдесят шесть",
+			Romaji:  "86",
+			Season:  1,
+		},
+	})
+	defer restore()
+
+	torrentsDir := filepath.Join(tmpDir, "Torrents")
+	jellyLibraryDir := filepath.Join(tmpDir, "Jellyfin")
+
+	folderPart1 := filepath.Join(torrentsDir, "86 - Eighty Six - Part 1 [BDRip 1080p]")
+	folderPart2 := filepath.Join(torrentsDir, "86 - Eighty Six - Part 2 [BDRip 1080p]")
+
+	os.MkdirAll(filepath.Join(folderPart1, "Rus sound"), 0755)
+	os.MkdirAll(filepath.Join(folderPart1, "Rus subs", "[Crunchyroll]"), 0755)
+	os.MkdirAll(filepath.Join(folderPart1, "Rus subs", "[SovetRomantica]", "надписи"), 0755)
+
+	os.MkdirAll(filepath.Join(folderPart2, "Rus sound", "надписи"), 0755)
+	os.MkdirAll(filepath.Join(folderPart2, "Rus subs", "[Crunchyroll]"), 0755)
+
+	// Part 1: episodes 01..11
+	for i := 1; i <= 11; i++ {
+		epStr := fmt.Sprintf("%02d", i)
+		vidName := fmt.Sprintf("[UHA-WINGS&VCB-Studio] EIGHTY SIX [%s][Ma10p_1080p][x265_flac_aac].mkv", epStr)
+		mkaName := fmt.Sprintf("[UHA-WINGS&VCB-Studio] EIGHTY SIX [%s][Ma10p_1080p][x265_flac_aac].mka", epStr)
+		assCRName := fmt.Sprintf("[UHA-WINGS&VCB-Studio] EIGHTY SIX [%s][Ma10p_1080p][x265_flac_aac].ass", epStr)
+		assSRName := fmt.Sprintf("[UHA-WINGS&VCB-Studio] EIGHTY SIX [%s][Ma10p_1080p][x265_flac_aac].ass", epStr)
+
+		os.WriteFile(filepath.Join(folderPart1, vidName), []byte("video"), 0644)
+		os.WriteFile(filepath.Join(folderPart1, "Rus sound", mkaName), []byte("audio"), 0644)
+		os.WriteFile(filepath.Join(folderPart1, "Rus subs", "[Crunchyroll]", assCRName), []byte("sub"), 0644)
+		os.WriteFile(filepath.Join(folderPart1, "Rus subs", "[SovetRomantica]", assSRName), []byte("sub"), 0644)
+		os.WriteFile(filepath.Join(folderPart1, "Rus subs", "[SovetRomantica]", "надписи", assSRName), []byte("sub"), 0644)
+	}
+
+	// Part 2: episodes 12..23
+	for i := 12; i <= 23; i++ {
+		epStr := fmt.Sprintf("%02d", i)
+		vidName := fmt.Sprintf("[UHA-WINGS&VCB-Studio] EIGHTY SIX [%s][Ma10p_1080p][x265_flac_aac].mkv", epStr)
+		mkaName := fmt.Sprintf("[UHA-WINGS&VCB-Studio] EIGHTY SIX [%s][Ma10p_1080p][x265_flac_aac].mka", epStr)
+		assSignName := fmt.Sprintf("[UHA-WINGS&VCB-Studio] EIGHTY SIX [%s][Ma10p_1080p][x265_flac_aac].ass", epStr)
+		assCRName := fmt.Sprintf("[UHA-WINGS&VCB-Studio] EIGHTY SIX [%s][Ma10p_1080p][x265_flac_aac].ass", epStr)
+
+		os.WriteFile(filepath.Join(folderPart2, vidName), []byte("video"), 0644)
+		os.WriteFile(filepath.Join(folderPart2, "Rus sound", mkaName), []byte("audio"), 0644)
+		os.WriteFile(filepath.Join(folderPart2, "Rus sound", "надписи", assSignName), []byte("sub"), 0644)
+		os.WriteFile(filepath.Join(folderPart2, "Rus subs", "[Crunchyroll]", assCRName), []byte("sub"), 0644)
+	}
+
+	cfg := &config.Config{
+		TorrentDirs:      []string{torrentsDir},
+		LibraryDir:       jellyLibraryDir,
+		FolderNamingMode: "russian",
+		UseShikimori:     true,
+		LanguageMapping: map[string]string{
+			"Rus sound": "ru",
+			"Rus subs":  "ru",
+		},
+	}
+
+	shows, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	plan := GeneratePlan(shows, cfg)
+
+	// Проверяем, что ВСЕ файлы попали в Season 01
+	season01Dir := filepath.Join(jellyLibraryDir, "Восемьдесят шесть", "Season 01")
+	for _, item := range plan {
+		if !strings.HasPrefix(item.TargetPath, season01Dir) {
+			t.Errorf("expected file to be in '%s', got '%s'", season01Dir, item.TargetPath)
+		}
+	}
+
+	// Проверяем наличие эпизодов от 1 до 23 в Season 01
+	foundEpisodes := make(map[int]bool)
+	for _, item := range plan {
+		base := filepath.Base(item.TargetPath)
+		if strings.HasPrefix(base, "86 S01E") {
+			epNumStr := base[7:9]
+			if ep, err := strconv.Atoi(epNumStr); err == nil {
+				foundEpisodes[ep] = true
+			}
+		}
+	}
+
+	for ep := 1; ep <= 23; ep++ {
+		if !foundEpisodes[ep] {
+			t.Errorf("expected episode %d in Season 01 to be linked, but not found", ep)
+		}
 	}
 }
 

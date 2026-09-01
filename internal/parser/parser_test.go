@@ -61,7 +61,10 @@ func TestExtractSeason(t *testing.T) {
 		{"Mushoku Tensei Isekai Ittara Honki Dasu II", 2},
 		{"Overlord IV", 4},
 		{"Solo Leveling 2nd Season", 2},
-		{"Spy x Family Part 2", 2},
+		{"Spy x Family Part 2", 1},
+		{"86 - Eighty Six - Part 2 [BDRip 1080p]", 1},
+		{"Mushoku Tensei Season 2 Part 2", 2},
+		{"Noragami 2 [1080p]", 2},
 	}
 
 	for _, tt := range tests {

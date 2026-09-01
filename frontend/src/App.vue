@@ -2,7 +2,7 @@
 import {ref, onMounted, onUnmounted, nextTick} from 'vue'
 import SettingsView from './components/SettingsView.vue'
 import LogsView from './components/LogsView.vue'
-import { GetConfig, SaveConfig, RunSync, GetLogs, ClearLogs, GetVersion, subscribeEvents } from './api.js'
+import { GetConfig, SaveConfig, RunSync, GetLogs, ClearLogs, GetVersion, ClearCache, subscribeEvents } from './api.js'
 
 const activeTab = ref('settings')
 const syncing = ref(false)
@@ -133,30 +133,30 @@ async function handleResyncClear(dryRun = false) {
 const themeMode = ref('dark') // 'dark' | 'light' | 'auto'
 
 function applyTheme(mode) {
-  if (mode === 'dark') {
-    document.body.classList.remove('light-theme')
-  } else if (mode === 'light') {
+  const isLight = mode === 'light' || (mode === 'auto' && window.matchMedia && !window.matchMedia('(prefers-color-scheme: dark)').matches)
+  if (isLight) {
+    document.documentElement.classList.add('light-theme')
     document.body.classList.add('light-theme')
-  } else if (mode === 'auto') {
-    const systemIsDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    if (systemIsDark) {
-      document.body.classList.remove('light-theme')
-    } else {
-      document.body.classList.add('light-theme')
-    }
+  } else {
+    document.documentElement.classList.remove('light-theme')
+    document.body.classList.remove('light-theme')
   }
+}
+
+function setTheme(mode) {
+  themeMode.value = mode
+  localStorage.setItem('theme-mode', mode)
+  applyTheme(mode)
 }
 
 function toggleTheme() {
   if (themeMode.value === 'dark') {
-    themeMode.value = 'light'
+    setTheme('light')
   } else if (themeMode.value === 'light') {
-    themeMode.value = 'auto'
+    setTheme('auto')
   } else {
-    themeMode.value = 'dark'
+    setTheme('dark')
   }
-  localStorage.setItem('theme-mode', themeMode.value)
-  applyTheme(themeMode.value)
 }
 
 let unsubscribeEvents = null
@@ -286,7 +286,7 @@ onUnmounted(() => {
       </div>
 
       <nav class="sidebar-nav">
-        <span class="sidebar-section-label">Навигация</span>
+        <span class="sidebar-section-label">Разделы</span>
 
         <button
           class="nav-item"
@@ -317,71 +317,62 @@ onUnmounted(() => {
           </svg>
           Журнал
         </button>
-
-        <div class="sidebar-divider"></div>
-
-        <button
-          class="nav-item"
-          :disabled="syncing"
-          @click="handleSync(false)"
-        >
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-          </svg>
-          <template v-if="syncing">
-            <span class="spinner"></span>
-            Синхронизация...
-          </template>
-          <template v-else>
-            Запуск
-          </template>
-        </button>
-
-        <button
-          class="nav-item"
-          @click="toggleTheme"
-        >
-          <!-- Иконка полумесяца для темной темы -->
-          <svg v-if="themeMode === 'dark'" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-          </svg>
-
-          <!-- Иконка солнца для светлой темы -->
-          <svg v-else-if="themeMode === 'light'" class="icon" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="5"/>
-            <line x1="12" y1="1" x2="12" y2="3"/>
-            <line x1="12" y1="21" x2="12" y2="23"/>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-            <line x1="1" y1="12" x2="3" y2="12"/>
-            <line x1="21" y1="12" x2="23" y2="12"/>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-          </svg>
-
-          <!-- Иконка монитора для авто-темы -->
-          <svg v-else class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-            <line x1="8" y1="21" x2="16" y2="21"/>
-            <line x1="12" y1="17" x2="12" y2="21"/>
-          </svg>
-
-          <span>
-            Тема: {{ themeMode === 'dark' ? 'Темная' : themeMode === 'light' ? 'Светлая' : 'Авто' }}
-          </span>
-        </button>
       </nav>
 
       <div class="sidebar-footer">
+        <!-- Status Badge -->
         <div class="sidebar-status" :class="{ offline: !serverOnline }">
           <div class="status-dot" :class="{ syncing: syncing && serverOnline, offline: !serverOnline }"></div>
           <span class="status-text">
-            {{ !serverOnline ? 'Сервер отключен' : (syncing ? 'Синхронизация...' : 'Служба: активна') }}
+            {{ !serverOnline ? 'Сервер отключен' : (syncing ? 'Синхронизация...' : 'Служба активна') }}
           </span>
+        </div>
+
+        <!-- Segmented Theme Switcher -->
+        <div class="sidebar-theme-switch" title="Выбор темы оформления">
+          <button
+            class="theme-switch-btn"
+            :class="{ active: themeMode === 'dark' }"
+            @click="setTheme('dark')"
+            title="Тёмная тема"
+            type="button"
+          >
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </button>
+          <button
+            class="theme-switch-btn"
+            :class="{ active: themeMode === 'light' }"
+            @click="setTheme('light')"
+            title="Светлая тема"
+            type="button"
+          >
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/>
+              <line x1="12" y1="1" x2="12" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="23"/>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+              <line x1="1" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="12" x2="23" y2="12"/>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+          </button>
+          <button
+            class="theme-switch-btn"
+            :class="{ active: themeMode === 'auto' }"
+            @click="setTheme('auto')"
+            title="Системная тема"
+            type="button"
+          >
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </button>
         </div>
         
         <div class="sidebar-footer-links">
@@ -460,24 +451,6 @@ onUnmounted(() => {
           <polyline points="10 9 9 9 8 9"/>
         </svg>
         <span>Журнал</span>
-      </button>
-
-      <button
-        class="mobile-nav-item mobile-nav-action"
-        :disabled="syncing"
-        @click="handleSync(false)"
-      >
-        <template v-if="syncing">
-          <span class="spinner"></span>
-          <span>Синхронизация</span>
-        </template>
-        <template v-else>
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-          </svg>
-          <span>Запуск</span>
-        </template>
       </button>
     </nav>
   </div>

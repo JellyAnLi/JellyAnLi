@@ -856,6 +856,13 @@ function formatFiles(count) {
   color: var(--text-muted);
 }
 
+.btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* Панель фильтров */
 .log-controls-bar {
   display: flex;
@@ -1358,14 +1365,52 @@ function formatFiles(count) {
 .log-line {
   content-visibility: auto;
   contain-intrinsic-size: 22px;
+  padding: 2.5px 8px;
+  border-radius: var(--radius-sm);
+  margin: 2px 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  row-gap: 2px;
+  column-gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
-.tree-line-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  line-height: 1.6;
-  white-space: nowrap;
+.timestamp {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  opacity: 0.75;
+  user-select: none;
+  font-feature-settings: 'tnum';
+  flex-shrink: 0;
+}
+
+.log-line.error {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid #ef4444;
+}
+
+.log-line.warning {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 3px solid #f59e0b;
+}
+
+.log-line.success {
+  color: #34d399;
+}
+
+.log-line.session {
+  color: var(--text-accent);
+  font-weight: 600;
+  padding: 6px 8px 3px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  margin-top: 6px;
+  width: 100%;
 }
 
 .tree-line-row.level-0 {

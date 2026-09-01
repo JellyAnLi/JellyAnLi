@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, watch, ref, onMounted } from 'vue'
+import { reactive, watch, ref, onMounted, onUnmounted } from 'vue'
 import FolderBrowserModal from './FolderBrowserModal.vue'
 import { GetVersion, GetCacheStats, ClearCache } from '../api.js'
 
@@ -19,6 +19,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['save', 'sync', 'toast'])
+
+// Активная подвкладка настроек: 'storage' | 'metadata' | 'maintenance'
+const activeSubTab = ref('storage')
 
 const ALL_PROVIDERS = [
   {
@@ -136,9 +139,24 @@ async function checkUpdates(force = true) {
   }
 }
 
+function handleKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault()
+    handleSave()
+  }
+}
+
+const isMac = ref(false)
+
 onMounted(() => {
+  isMac.value = typeof navigator !== 'undefined' && (/Mac|iPhone|iPod|iPad/.test(navigator.platform) || /Macintosh|Mac OS X/.test(navigator.userAgent))
   checkUpdates(false)
   loadCacheStats()
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 // Синхронизируем при изменении props
@@ -146,7 +164,8 @@ watch(() => props.config, (cfg) => {
   if (cfg) {
     form.torrent_dirs = Array.isArray(cfg.torrent_dirs) && cfg.torrent_dirs.length > 0
       ? [...cfg.torrent_dirs]
-      : ['']
+      : (cfg.torrents_dir ? [cfg.torrents_dir] : [''])
+      
     form.library_dir = cfg.library_dir || cfg.shows_dir || ''
     form.sync_interval_minutes = cfg.sync_interval_minutes !== undefined ? cfg.sync_interval_minutes : 5
     form.folder_naming_mode = cfg.folder_naming_mode || 'russian'
@@ -293,472 +312,648 @@ function handleSave() {
 </script>
 
 <template>
-  <!-- Карточка: Папки торрентов -->
-  <div class="card">
-    <div class="card-title">Папки торрентов</div>
-    <div class="card-subtitle">Пути к исходным раздачам аниме (можно указать несколько источников)</div>
-
-    <div class="form-group">
-      <label class="form-label">Папки, куда скачиваются раздачи:</label>
-
-      <div
-        v-for="(dir, index) in form.torrent_dirs"
-        :key="index"
-        class="input-row"
-        style="margin-bottom: 10px;"
+  <div class="settings-view-wrapper">
+    <!-- Верхняя панель подвкладок настроек -->
+    <div class="settings-subtabs-bar">
+      <button
+        class="settings-subtab-btn"
+        :class="{ active: activeSubTab === 'storage' }"
+        @click="activeSubTab = 'storage'"
+        type="button"
       >
-        <input
-          type="text"
-          v-model="form.torrent_dirs[index]"
-          placeholder="/path/to/torrents"
-          style="flex: 1;"
-        />
-        <button
-          class="btn-icon"
-          @click="openFolderBrowser('torrent_dir_' + index, form.torrent_dirs[index])"
-          title="Выбрать папку"
-          type="button"
-        >
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
-        </button>
-        <button
-          class="btn-icon"
-          @click="removeTorrentDir(index)"
-          title="Удалить папку"
-          type="button"
-          style="border-color: rgba(239, 68, 68, 0.2); color: rgb(239, 68, 68);"
-        >
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            <line x1="10" y1="11" x2="10" y2="17"></line>
-            <line x1="14" y1="11" x2="14" y2="17"></line>
-          </svg>
-        </button>
-      </div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span>Папки и хранилище</span>
+      </button>
 
       <button
-        class="btn btn-secondary"
-        @click="addTorrentDir"
+        class="settings-subtab-btn"
+        :class="{ active: activeSubTab === 'metadata' }"
+        @click="activeSubTab = 'metadata'"
         type="button"
-        style="margin-top: 5px; font-size: 0.85rem; padding: 6px 12px;"
       >
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 4px;">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
         </svg>
-        Добавить папку
+        <span>Метаданные и сеть</span>
+      </button>
+
+      <button
+        class="settings-subtab-btn"
+        :class="{ active: activeSubTab === 'maintenance' }"
+        @click="activeSubTab = 'maintenance'"
+        type="button"
+      >
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+        <span>Автоматизация и кэш</span>
       </button>
     </div>
-  </div>
 
-  <!-- Карточка: Медиатека Jellyfin -->
-  <div class="card">
-    <div class="card-title">Медиатека Jellyfin</div>
-    <div class="card-subtitle">Конечная директория для аниме-библиотеки в Jellyfin</div>
-
-    <div class="form-group">
-      <label class="form-label">Папка медиатеки аниме в Jellyfin:</label>
-      <div class="input-row">
-        <input
-          type="text"
-          v-model="form.library_dir"
-          placeholder="/path/to/jellyfin/anime"
-        />
-        <button
-          class="btn-icon"
-          @click="openFolderBrowser('library_dir', form.library_dir)"
-          title="Выбрать папку медиатеки"
-          type="button"
-        >
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
-        </button>
-      </div>
-      <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">
-        Здесь создаются папки тайтлов: сериалы раскладываются по сезонам (<code>Season 01</code>, <code>Season 02</code>), а полнометражные фильмы и спешлы — в <code>Season 00</code> с автоматической генерацией <code>.nfo</code> описаний для Jellyfin.
-      </p>
-    </div>
-
-    <div class="library-notice-box" style="margin-top: 14px;">
-      <svg class="notice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="8" x2="12" y2="12"></line>
-        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-      </svg>
-      <div class="notice-text">
-        <strong>Внимание:</strong> В этой папке порядок полностью наводит JellyAnLi. Сервис автоматически удаляет недействительные симлинки, устаревшие ссылки и пустые каталоги.
-      </div>
-    </div>
-  </div>
-
-  <!-- Карточка: Именование папок в медиатеке -->
-  <div class="card">
-    <div class="card-title">Именование папок в медиатеке</div>
-    <div class="card-subtitle">Формат названий тайтлов для каталога Jellyfin</div>
-
-    <div class="form-group">
-      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
-        <label class="checkbox-row" style="padding: 4px 0;" @click.prevent="form.folder_naming_mode = 'russian'">
-          <input type="radio" name="folder_naming_mode" value="russian" :checked="form.folder_naming_mode === 'russian'" @click.stop="form.folder_naming_mode = 'russian'" />
-          <span class="checkbox-label">🇷🇺 <strong>Русские названия</strong> (например, <em>«Клинок, рассекающий демонов»</em>)</span>
-        </label>
-        <label class="checkbox-row" style="padding: 4px 0;" @click.prevent="form.folder_naming_mode = 'romaji'">
-          <input type="radio" name="folder_naming_mode" value="romaji" :checked="form.folder_naming_mode === 'romaji'" @click.stop="form.folder_naming_mode = 'romaji'" />
-          <span class="checkbox-label">🇬🇧 <strong>Официальные Ромадзи</strong> (например, <em>«Kimetsu no Yaiba»</em>)</span>
-        </label>
-        <label class="checkbox-row" style="padding: 4px 0;" @click.prevent="form.folder_naming_mode = 'original'">
-          <input type="radio" name="folder_naming_mode" value="original" :checked="form.folder_naming_mode === 'original'" @click.stop="form.folder_naming_mode = 'original'" />
-          <span class="checkbox-label">📁 <strong>Оригинальные из раздач</strong> (как назван торрент, без переименования)</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="form-group" style="margin-top: 14px;">
-      <label class="checkbox-row" @click.prevent="form.use_relative_symlinks = !form.use_relative_symlinks">
-        <input type="checkbox" :checked="form.use_relative_symlinks" @click.stop="form.use_relative_symlinks = !form.use_relative_symlinks" />
-        <span class="checkbox-label">Использовать относительные симлинки (рекомендуется для Docker, NAS, CasaOS)</span>
-      </label>
-    </div>
-  </div>
-
-  <!-- Карточка: Провайдеры метаданных и приоритеты поиска -->
-  <div class="card">
-    <div class="card-title">Провайдеры метаданных и приоритеты поиска</div>
-    <div class="card-subtitle">Цепочка поиска информации об аниме (поиск идет сверху вниз по списку)</div>
-
-    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
-      <div
-        v-for="(p, index) in form.providers"
-        :key="p.id"
-        style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); gap: 12px;"
-      >
-        <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-          <input
-            type="checkbox"
-            v-model="p.enabled"
-            :id="'prov_' + p.id"
-            style="width: 17px; height: 17px; cursor: pointer;"
-          />
+    <!-- Вкладка 1: ПАПКИ И МЕДИАТЕКА -->
+    <div v-show="activeSubTab === 'storage'" class="settings-tab-pane">
+      <!-- Карточка: Папки торрентов -->
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-icon-pill">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </div>
           <div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <label :for="'prov_' + p.id" style="font-weight: 600; font-size: 13.5px; cursor: pointer; color: var(--text-primary);">
-                {{ getProviderMeta(p.id).name }}
+            <div class="card-title">Папки торрентов</div>
+            <div class="card-subtitle">Пути к исходным раздачам аниме (можно указать несколько источников)</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Папки, куда скачиваются раздачи:</label>
+
+          <div
+            v-for="(dir, index) in form.torrent_dirs"
+            :key="index"
+            class="input-row"
+            style="margin-bottom: 10px;"
+          >
+            <input
+              type="text"
+              v-model="form.torrent_dirs[index]"
+              placeholder="/media/Torrents/Anime"
+              style="flex: 1;"
+            />
+            <button
+              class="btn-icon"
+              @click="openFolderBrowser('torrent_dir_' + index, form.torrent_dirs[index])"
+              title="Выбрать папку на сервере"
+              type="button"
+            >
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+            </button>
+            <button
+              class="btn-icon btn-icon-danger"
+              @click="removeTorrentDir(index)"
+              title="Удалить папку"
+              type="button"
+            >
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </button>
+          </div>
+
+          <button
+            class="btn btn-secondary btn-sm"
+            @click="addTorrentDir"
+            type="button"
+          >
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Добавить папку
+          </button>
+        </div>
+      </div>
+
+      <!-- Карточка: Медиатека Jellyfin -->
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-icon-pill accent">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+              <line x1="6" y1="6" x2="6.01" y2="6"/>
+              <line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">Медиатека Jellyfin</div>
+            <div class="card-subtitle">Конечная директория, куда создаются аккуратные симлинки для Jellyfin</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Папка медиатеки аниме в Jellyfin:</label>
+          <div class="input-row">
+            <input
+              type="text"
+              v-model="form.library_dir"
+              placeholder="/media/Jellyfin/Anime"
+            />
+            <button
+              class="btn-icon"
+              @click="openFolderBrowser('library_dir', form.library_dir)"
+              title="Выбрать папку медиатеки"
+              type="button"
+            >
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+            </button>
+          </div>
+          <p class="form-help-text">
+            Сериалы раскладываются по сезонам (<code>Season 01</code>, <code>Season 02</code>), а фильмы и спешлы — в <code>Season 00</code> с метаданными <code>.nfo</code>.
+          </p>
+        </div>
+
+        <div class="library-notice-box">
+          <svg class="notice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <div class="notice-text">
+            <strong>Автоматический порядок:</strong> JellyAnLi автоматически удаляет устаревшие симлинки, битые ссылки и пустые папки при удалении или переименовании файлов в торрентах.
+          </div>
+        </div>
+      </div>
+
+      <!-- Карточка: Именование и симлинки -->
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-icon-pill">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">Именование папок и симлинки</div>
+            <div class="card-subtitle">Формат названий каталогов и тип создаваемых ссылок</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Формат названий папок аниме:</label>
+          <div class="naming-options-grid">
+            <label
+              class="naming-option-card"
+              :class="{ selected: form.folder_naming_mode === 'russian' }"
+              @click="form.folder_naming_mode = 'russian'"
+            >
+              <input type="radio" name="folder_naming_mode" value="russian" :checked="form.folder_naming_mode === 'russian'" style="display: none;" />
+              <div class="naming-option-header">
+                <span class="naming-flag">🇷🇺</span>
+                <strong>Русские названия</strong>
+              </div>
+              <span class="naming-example">«Клинок, рассекающий демонов»</span>
+            </label>
+
+            <label
+              class="naming-option-card"
+              :class="{ selected: form.folder_naming_mode === 'romaji' }"
+              @click="form.folder_naming_mode = 'romaji'"
+            >
+              <input type="radio" name="folder_naming_mode" value="romaji" :checked="form.folder_naming_mode === 'romaji'" style="display: none;" />
+              <div class="naming-option-header">
+                <span class="naming-flag">🇬🇧</span>
+                <strong>Официальные Ромадзи</strong>
+              </div>
+              <span class="naming-example">«Kimetsu no Yaiba»</span>
+            </label>
+
+            <label
+              class="naming-option-card"
+              :class="{ selected: form.folder_naming_mode === 'original' }"
+              @click="form.folder_naming_mode = 'original'"
+            >
+              <input type="radio" name="folder_naming_mode" value="original" :checked="form.folder_naming_mode === 'original'" style="display: none;" />
+              <div class="naming-option-header">
+                <span class="naming-flag">📁</span>
+                <strong>Оригинал из раздачи</strong>
+              </div>
+              <span class="naming-example">Как назван каталог в торренте</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 18px;">
+          <label class="checkbox-row" @click.prevent="form.use_relative_symlinks = !form.use_relative_symlinks">
+            <input type="checkbox" :checked="form.use_relative_symlinks" @click.stop="form.use_relative_symlinks = !form.use_relative_symlinks" />
+            <div>
+              <span class="checkbox-label">Использовать относительные симлинки</span>
+              <div class="checkbox-subtext">Рекомендуется для Docker, NAS и CasaOS, чтобы ссылки не ломались при монтировании путей.</div>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Вкладка 2: МЕТАДАННЫЕ И СЕТЬ -->
+    <div v-show="activeSubTab === 'metadata'" class="settings-tab-pane">
+      <!-- Карточка: Провайдеры метаданных -->
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-icon-pill accent">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">Провайдеры метаданных и приоритет поиска</div>
+            <div class="card-subtitle">Цепочка поиска информации об аниме (поиск выполняется сверху вниз)</div>
+          </div>
+        </div>
+
+        <div class="providers-list">
+          <div
+            v-for="(p, index) in form.providers"
+            :key="p.id"
+            class="provider-item"
+            :class="{ disabled: !p.enabled }"
+          >
+            <div class="provider-info-col">
+              <input
+                type="checkbox"
+                v-model="p.enabled"
+                :id="'prov_' + p.id"
+                class="provider-checkbox"
+              />
+              <div>
+                <div class="provider-name-row">
+                  <label :for="'prov_' + p.id" class="provider-title">
+                    {{ getProviderMeta(p.id).name }}
+                  </label>
+                  <span class="provider-badge">
+                    {{ getProviderMeta(p.id).badge }}
+                  </span>
+                </div>
+                <div class="provider-desc">
+                  {{ getProviderMeta(p.id).desc }}
+                </div>
+              </div>
+            </div>
+
+            <div class="provider-actions-col">
+              <!-- Тумблер Proxy -->
+              <label class="provider-proxy-toggle" :class="{ disabled: !p.enabled }" title="Маршрутизировать запросы через Proxy">
+                <input
+                  type="checkbox"
+                  v-model="p.use_proxy"
+                  :disabled="!p.enabled"
+                />
+                <span>Через Proxy</span>
               </label>
-              <span style="font-size: 11px; padding: 2px 6px; background: rgba(59, 130, 246, 0.15); color: var(--text-accent); border-radius: 4px; font-weight: 500;">
-                {{ getProviderMeta(p.id).badge }}
+
+              <!-- Кнопки перемещения приоритета -->
+              <div class="reorder-btn-group">
+                <button
+                  class="btn-icon"
+                  @click="moveProviderUp(index)"
+                  :disabled="index === 0"
+                  title="Повысить приоритет"
+                  type="button"
+                >
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="18 15 12 9 6 15"></polyline>
+                  </svg>
+                </button>
+                <button
+                  class="btn-icon"
+                  @click="moveProviderDown(index)"
+                  :disabled="index === form.providers.length - 1"
+                  title="Понизить приоритет"
+                  type="button"
+                >
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Карточка: Прокси-сервер (Proxy) -->
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-icon-pill">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+              <line x1="6" y1="6" x2="6.01" y2="6"/>
+              <line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">Прокси-сервер (Proxy)</div>
+            <div class="card-subtitle">Для обхода сетевых ограничений при обращении к базам метаданных</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Адрес прокси (SOCKS5 / SOCKS5h / HTTP):</label>
+          <div class="input-row">
+            <input
+              type="text"
+              v-model="form.proxy_url"
+              placeholder="socks5://127.0.0.1:1080 или http://proxy.local:8080"
+              style="flex: 1;"
+            />
+          </div>
+          <p class="form-help-text">
+            Поддерживаются протоколы <code>socks5://</code>, <code>socks5h://</code> (с удаленным DNS) и <code>http://</code>. Включается отдельно для каждого провайдера выше.
+          </p>
+        </div>
+      </div>
+
+      <!-- Карточка: Языковые сопоставления -->
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-icon-pill">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m5 8 6 6"/>
+              <path d="m4 14 6-6 2-3"/>
+              <path d="M2 5h12"/>
+              <path d="M7 2h1"/>
+              <path d="m22 22-5-10-5 10"/>
+              <path d="M14 18h6"/>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">Языковые сопоставления (Аудио и субтитры)</div>
+            <div class="card-subtitle">Привязка языковых меток (например, <code>.ru.mka</code>, <code>.en.ass</code>) по папкам в раздачах</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div
+            v-for="(mapping, index) in form.language_mapping"
+            :key="index"
+            class="input-row"
+            style="margin-bottom: 8px;"
+          >
+            <input
+              type="text"
+              v-model="mapping.key"
+              placeholder="Ключевое слово (например: Rus sound, Eng subs)"
+              style="flex: 2;"
+            />
+            <span class="mapping-arrow">➔</span>
+            <input
+              type="text"
+              v-model="mapping.val"
+              placeholder="Код (ru, en)"
+              style="flex: 1; max-width: 110px;"
+            />
+            <button
+              class="btn-icon btn-icon-danger"
+              @click="removeLanguageMapping(index)"
+              title="Удалить сопоставление"
+              type="button"
+            >
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+
+          <button
+            class="btn btn-secondary btn-sm"
+            @click="addLanguageMapping"
+            type="button"
+          >
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Добавить сопоставление
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Вкладка 3: АВТОМАТИЗАЦИЯ И КЭШ -->
+    <div v-show="activeSubTab === 'maintenance'" class="settings-tab-pane">
+      <!-- Карточка: Кэш метаданных и состояние связей -->
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-icon-pill accent">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </div>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div class="card-title">Кэш метаданных и состояние связей</div>
+              <button
+                class="btn-icon"
+                @click="loadCacheStats"
+                title="Обновить статистику кэша"
+                type="button"
+              >
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+            </div>
+            <div class="card-subtitle">Сохранённые ответы баз аниме и кэш отслеживаемых файлов</div>
+          </div>
+        </div>
+
+        <!-- Счётчики записей -->
+        <div v-if="cacheStats" class="cache-stats-grid">
+          <div class="cache-stat-card">
+            <div class="cache-stat-label">Shikimori</div>
+            <div class="cache-stat-value">{{ cacheStats.shikimori_count }}</div>
+          </div>
+          <div class="cache-stat-card">
+            <div class="cache-stat-label">AniList</div>
+            <div class="cache-stat-value">{{ cacheStats.anilist_count }}</div>
+          </div>
+          <div class="cache-stat-card">
+            <div class="cache-stat-label">AniDB</div>
+            <div class="cache-stat-value">{{ cacheStats.anidb_count }}</div>
+          </div>
+          <div class="cache-stat-card highlight">
+            <div class="cache-stat-label">state.json</div>
+            <div class="cache-stat-value">{{ cacheStats.state_files_count }}</div>
+          </div>
+        </div>
+
+        <p class="form-help-text" style="margin-bottom: 14px;">
+          При изменении названий в раздачах или базах данных сброс кэша позволяет мгновенно перекачать актуальные метаданные без ручной очистки файлов на сервере.
+        </p>
+
+        <!-- Кнопки очистки кэша -->
+        <div class="cache-actions-row">
+          <button
+            class="btn btn-secondary btn-sm"
+            @click="handleClearMetadataOnly"
+            :disabled="clearingCache"
+            type="button"
+            title="Удаляет только кэш ответов Shikimori, AniList и AniDB"
+          >
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            Очистить кэш баз
+          </button>
+
+          <button
+            class="btn btn-secondary btn-sm"
+            @click="handleResyncWithClear(true)"
+            :disabled="clearingCache || syncing"
+            type="button"
+            title="Очищает кэш и показывает предпросмотр изменений (Dry Run)"
+          >
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            Сбросить кэш и Dry Run
+          </button>
+
+          <button
+            class="btn btn-danger btn-sm"
+            @click="handleResyncWithClear(false)"
+            :disabled="clearingCache || syncing"
+            type="button"
+            title="Сбрасывает все кэши (базы + state.json) и запускает полную синхронизацию заново"
+          >
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            Сбросить всё и перекачать мету
+          </button>
+        </div>
+      </div>
+
+      <!-- Карточка: Периодическая проверка -->
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-icon-pill">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">Фоновое сканирование</div>
+            <div class="card-subtitle">Периодическая проверка появления новых серий и раздач</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Интервал автоматической фоновой синхронизации:</label>
+          <div class="input-row" style="max-width: 200px;">
+            <input
+              type="number"
+              v-model.number="form.sync_interval_minutes"
+              min="0"
+              max="1440"
+              placeholder="10"
+            />
+            <span class="input-suffix">минут</span>
+          </div>
+          <p class="form-help-text">
+            Укажите <code>0</code> для отключения автоматического фонового сканирования.
+          </p>
+        </div>
+      </div>
+
+      <!-- Карточка: О программе и обновления -->
+      <div class="card" v-if="versionData">
+        <div class="card-header-row">
+          <div class="card-icon-pill">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </div>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div class="card-title">О программе и обновления</div>
+              <span class="version-badge">
+                {{ versionData.current_version }}
               </span>
             </div>
-            <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">
-              {{ getProviderMeta(p.id).desc }}
+            <div class="card-subtitle">Проверка релизов на GitHub и статус обновлений</div>
+          </div>
+        </div>
+
+        <div v-if="versionData.has_update" class="update-banner">
+          <div class="update-banner-content">
+            <div>
+              <div class="update-title">
+                🎉 Доступна новая версия {{ versionData.latest_version }}!
+              </div>
+              <div class="update-desc">
+                Рекомендуется обновиться для получения свежих исправлений и улучшений.
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div style="display: flex; align-items: center; gap: 14px;">
-          <!-- Тумблер прокси для провайдера -->
-          <label class="checkbox-row" style="padding: 0; font-size: 12px; gap: 6px;" title="Маршрутизировать запросы к этому сервису через Proxy">
-            <input
-              type="checkbox"
-              v-model="p.use_proxy"
-              :disabled="!p.enabled"
-            />
-            <span style="color: var(--text-secondary); font-size: 12px;">Через Proxy</span>
-          </label>
-
-          <!-- Кнопки перемещения приоритета -->
-          <div style="display: flex; gap: 4px;">
-            <button
-              class="btn-icon"
-              @click="moveProviderUp(index)"
-              :disabled="index === 0"
-              title="Повысить приоритет"
-              type="button"
-              style="padding: 6px; width: 28px; height: 28px;"
+            <a
+              :href="versionData.release_url || 'https://github.com/JellyAnLi/JellyAnLi/releases'"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-primary btn-sm"
+              style="text-decoration: none;"
             >
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
-                <polyline points="18 15 12 9 6 15"></polyline>
-              </svg>
-            </button>
-            <button
-              class="btn-icon"
-              @click="moveProviderDown(index)"
-              :disabled="index === form.providers.length - 1"
-              title="Понизить приоритет"
-              type="button"
-              style="padding: 6px; width: 28px; height: 28px;"
-            >
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </button>
+              Открыть релиз на GitHub ➔
+            </a>
           </div>
+        </div>
+
+        <div v-else class="version-status-row">
+          <div class="version-status-left">
+            <span class="version-check-icon">✓</span>
+            <span>У вас установлена последняя актуальная версия ({{ versionData.current_version }}).</span>
+          </div>
+          <button
+            class="btn btn-secondary btn-sm"
+            @click="checkUpdates(true)"
+            :disabled="checkingUpdate"
+            type="button"
+          >
+            <span v-if="checkingUpdate" class="spinner" style="width: 12px; height: 12px; margin-right: 4px;"></span>
+            {{ checkingUpdate ? 'Проверка...' : 'Проверить снова' }}
+          </button>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Карточка: Прокси-сервер (Proxy) -->
-  <div class="card">
-    <div class="card-title">Прокси-сервер (Proxy)</div>
-    <div class="card-subtitle">Для обхода региональных ограничений при обращении к базам метаданных</div>
-
-    <div class="form-group">
-      <label class="form-label">Адрес прокси (HTTP / HTTPS / SOCKS5 / SOCKS5h):</label>
-      <div class="input-row">
-        <input
-          type="text"
-          v-model="form.proxy_url"
-          placeholder="socks5://127.0.0.1:1080 или http://proxy.local:8080"
-          style="flex: 1;"
-        />
+    <!-- Плавающая нижняя панель сохранения -->
+    <div class="settings-save-bar">
+      <div class="save-bar-hint">
+        <span v-if="isMac">Нажмите <kbd>⌘</kbd> <kbd>S</kbd> для быстрого сохранения</span>
+        <span v-else>Нажмите <kbd>Ctrl</kbd> + <kbd>S</kbd> для быстрого сохранения</span>
       </div>
-      <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 6px; line-height: 1.4;">
-        Поддерживаются протоколы <code>socks5://</code>, <code>socks5h://</code> (с удаленным DNS-резолвом через прокси) и <code>http://</code>. Включается персонально для каждого провайдера выше.
-      </p>
-    </div>
-  </div>
-
-  <!-- Карточка: Языковые сопоставления (Language Mappings) -->
-  <div class="card">
-    <div class="card-title">Языковые сопоставления (Аудио и субтитры)</div>
-    <div class="card-subtitle">Определение языковых суффиксов (.ru.mka, .en.ass) по ключевым словам в путях раздач</div>
-
-    <div class="form-group">
-      <div
-        v-for="(mapping, index) in form.language_mapping"
-        :key="index"
-        class="input-row"
-        style="margin-bottom: 8px;"
-      >
-        <input
-          type="text"
-          v-model="mapping.key"
-          placeholder="Ключевое слово (RUS Sound, Dub, etc.)"
-          style="flex: 2;"
-        />
-        <span style="color: var(--text-muted); font-size: 13px;">➔</span>
-        <input
-          type="text"
-          v-model="mapping.val"
-          placeholder="Код языка (ru, en)"
-          style="flex: 1; max-width: 110px;"
-        />
-        <button
-          class="btn-icon"
-          @click="removeLanguageMapping(index)"
-          title="Удалить сопоставление"
-          type="button"
-          style="border-color: rgba(239, 68, 68, 0.2); color: rgb(239, 68, 68);"
-        >
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-        </button>
-      </div>
-
-      <button
-        class="btn btn-secondary"
-        @click="addLanguageMapping"
-        type="button"
-        style="margin-top: 6px; font-size: 0.85rem; padding: 6px 12px;"
-      >
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 4px;">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
+      <button class="btn btn-primary btn-save" @click="handleSave">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
         </svg>
-        Добавить язык
+        Сохранить настройки
       </button>
     </div>
+
+    <!-- Веб-диалог выбора папок -->
+    <FolderBrowserModal
+      :show="isModalShow"
+      :initial-path="currentModalInitialPath"
+      title="Выберите папку на сервере"
+      @select="handleFolderSelect"
+      @close="isModalShow = false"
+    />
   </div>
-
-  <!-- Карточка: Периодическая проверка -->
-  <div class="card">
-    <div class="card-title">Периодическая проверка</div>
-    <div class="card-subtitle">Автоматическая фоновая работа сервиса</div>
-
-    <div class="form-group">
-      <label class="form-label">Интервал между автоматическими фоновыми синхронизациями:</label>
-      <div class="input-row">
-        <input
-          type="number"
-          v-model.number="form.sync_interval_minutes"
-          min="0"
-          max="1440"
-          style="max-width: 120px;"
-        />
-        <span class="input-suffix">минут (0 для отключения фонового таймера)</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Карточка: Кэш метаданных и состояние связей -->
-  <div class="card">
-    <div class="card-title" style="display: flex; align-items: center; justify-content: space-between;">
-      <span>Кэш метаданных и состояние связей</span>
-      <button
-        class="btn-icon"
-        @click="loadCacheStats"
-        title="Обновить статистику кэша"
-        type="button"
-        style="padding: 4px; width: 26px; height: 26px;"
-      >
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
-          <polyline points="23 4 23 10 17 10"></polyline>
-          <polyline points="1 20 1 14 7 14"></polyline>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-      </button>
-    </div>
-    <div class="card-subtitle">Локально сохранённые ответы баз аниме и кэш проверенных файлов</div>
-
-    <!-- Блок со счетчиками -->
-    <div v-if="cacheStats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 12px 0;">
-      <div style="background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 12px; text-align: center;">
-        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Shikimori</div>
-        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">{{ cacheStats.shikimori_count }}</div>
-      </div>
-      <div style="background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 12px; text-align: center;">
-        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">AniList</div>
-        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">{{ cacheStats.anilist_count }}</div>
-      </div>
-      <div style="background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 12px; text-align: center;">
-        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">AniDB</div>
-        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">{{ cacheStats.anidb_count }}</div>
-      </div>
-      <div style="background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 12px; text-align: center;">
-        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">State.json</div>
-        <div style="font-size: 18px; font-weight: 700; color: var(--text-accent); margin-top: 2px;">{{ cacheStats.state_files_count }}</div>
-      </div>
-    </div>
-
-    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.45;">
-      Если названия распознались неверно из-за старого кэша или сбоя в базе, вы можете сбросить кэш и перекачать информацию о тайтлах заново без необходимости вручную удалять файлы на сервере.
-    </p>
-
-    <!-- Кнопки управления кэшем -->
-    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-      <button
-        class="btn btn-secondary"
-        @click="handleClearMetadataOnly"
-        :disabled="clearingCache"
-        type="button"
-        style="font-size: 0.85rem; padding: 7px 14px;"
-        title="Удаляет только кэшированные ответы Shikimori, AniList и AniDB"
-      >
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 4px;">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-        </svg>
-        Очистить кэш баз
-      </button>
-
-      <button
-        class="btn btn-secondary"
-        @click="handleResyncWithClear(true)"
-        :disabled="clearingCache || syncing"
-        type="button"
-        style="font-size: 0.85rem; padding: 7px 14px;"
-        title="Очищает кэш метаданных и состояние и показывает предпросмотр (Dry Run)"
-      >
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 4px;">
-          <circle cx="11" cy="11" r="8"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        Сбросить кэш и Dry Run
-      </button>
-
-      <button
-        class="btn btn-primary"
-        @click="handleResyncWithClear(false)"
-        :disabled="clearingCache || syncing"
-        type="button"
-        style="font-size: 0.85rem; padding: 7px 14px; background: #dc2626; border-color: #dc2626;"
-        title="Очищает все кэши (метаданные + state.json) и запускает полную синхронизацию заново"
-      >
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 4px;">
-          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-        </svg>
-        Сбросить всё и перекачать мету
-      </button>
-    </div>
-  </div>
-
-  <!-- Карточка: О программе и обновления -->
-  <div class="card" v-if="versionData">
-    <div class="card-title" style="display: flex; align-items: center; justify-content: space-between;">
-      <span>О программе и обновления</span>
-      <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">
-        Текущая версия: <b>{{ versionData.current_version }}</b>
-      </span>
-    </div>
-    <div class="card-subtitle">Проверка релизов на GitHub и статус обновлений</div>
-
-    <div v-if="versionData.has_update" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 14px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-        <div>
-          <div style="font-weight: 600; color: #fbbf24; font-size: 13.5px;">
-            🎉 Доступна новая версия: {{ versionData.latest_version }}!
-          </div>
-          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
-            Рекомендуется обновиться для получения свежих исправлений и улучшений.
-          </div>
-        </div>
-        <a
-          :href="versionData.release_url || 'https://github.com/JellyAnLi/JellyAnLi/releases'"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn btn-primary"
-          style="padding: 6px 14px; font-size: 12px; text-decoration: none;"
-        >
-          Открыть релиз на GitHub ➔
-        </a>
-      </div>
-      <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 8px; border-top: 1px solid rgba(245, 158, 11, 0.2); padding-top: 6px;">
-        💡 <b>Как обновить:</b> В Docker выполните <code>docker compose pull && docker compose up -d</code> (или настройте <b>Watchtower</b> для фонового автообновления контейнеров). Для бинарников — скачайте свежий архив со страницы релиза.
-      </div>
-    </div>
-
-    <div v-else style="display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--text-secondary); padding: 6px 0;">
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <span style="color: var(--success); font-size: 14px;">✓</span>
-        <span>У вас установлена актуальная версия ({{ versionData.current_version }}).</span>
-      </div>
-      <button
-        class="btn btn-secondary"
-        @click="checkUpdates(true)"
-        :disabled="checkingUpdate"
-        type="button"
-        style="padding: 5px 12px; font-size: 11.5px;"
-      >
-        <span v-if="checkingUpdate" class="spinner" style="width: 12px; height: 12px; margin-right: 4px;"></span>
-        {{ checkingUpdate ? 'Проверка...' : 'Проверить снова' }}
-      </button>
-    </div>
-  </div>
-
-  <!-- Кнопка сохранения -->
-  <div class="btn-save-wrapper">
-    <button class="btn btn-primary" @click="handleSave">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-        <polyline points="17 21 17 13 7 13 7 21"/>
-        <polyline points="7 3 7 8 15 8"/>
-      </svg>
-      Сохранить настройки
-    </button>
-  </div>
-
-  <!-- Веб-диалог выбора папок -->
-  <FolderBrowserModal
-    :show="isModalShow"
-    :initial-path="currentModalInitialPath"
-    title="Выберите папку на сервере"
-    @select="handleFolderSelect"
-    @close="isModalShow = false"
-  />
 </template>

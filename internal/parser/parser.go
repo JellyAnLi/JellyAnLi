@@ -60,7 +60,6 @@ var (
 		regexp.MustCompile(`(?i)(\d{1,2})\s?(?:сезон|season|тв|tv)`),
 		regexp.MustCompile(`(?i)\bS(\d{1,2})E(\d{1,3})\b`),
 		regexp.MustCompile(`(?i)\b(?:tv)\s?[-_]?\s?(\d{1,2})\b`),
-		regexp.MustCompile(`(?i)\b(?:part|cour|часть)\b\s?[-_]?\s?(\d{1,2})\b`),
 		regexp.MustCompile(`(?i)\b([2-9])\b\s*(?:\(\d{4}\)|\(\s*(?:tv|тв)?\s*\d*\s*\)|\[|$)`),
 	}
 
@@ -74,7 +73,8 @@ var (
 	romanPartRegex = regexp.MustCompile(`(?i)\b(?:part|cour|часть|pt)\b\s*[-_.]?\s*\b(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\b`)
 
 	// Регулярное выражение для римских цифр сезонов (II, III, IV, V, VI, VII, VIII, IX, X, XI, XII)
-	romanSeasonRegex = regexp.MustCompile(`(?i)\b(?:season|part|cour|сезон|часть|tv|тв)?\s*[-_.]?\s*\b(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\b`)
+	// Внимание: БЕЗ (?i), чтобы "x" в Spy x Family или Hunter x Hunter не считался римской цифрой 10
+	romanSeasonRegex = regexp.MustCompile(`\b(?:[sS][eE][aA][sS][oO][nN]|[сС][еЕ][зЗ][оО][нН]|[tT][vV]|[тТ][вВ])?\s*[-_.]?\s*\b(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\b`)
 
 	// Регулярные выражения для извлечения номера эпизода
 	episodeRegexes = []*regexp.Regexp{
@@ -122,7 +122,7 @@ func parseRomanNumeral(s string) int {
 	case "XII":
 		return 12
 	default:
-		return 0
+		return 1
 	}
 }
 
@@ -139,13 +139,14 @@ func CleanShowName(folderName string) string {
 	name = strings.ReplaceAll(name, "_", " ")
 	name = strings.ReplaceAll(name, ".", " ")
 
-	for _, re := range seasonRegexes {
-		name = re.ReplaceAllString(name, " ")
-	}
 	for _, re := range partRegexes {
 		name = re.ReplaceAllString(name, " ")
 	}
 	name = romanPartRegex.ReplaceAllString(name, " ")
+
+	for _, re := range seasonRegexes {
+		name = re.ReplaceAllString(name, " ")
+	}
 	name = romanSeasonRegex.ReplaceAllString(name, " ")
 
 	name = garbageRegex.ReplaceAllString(name, " ")
@@ -172,14 +173,15 @@ func ExtractShowNameFromFile(fileName string) string {
 	name = strings.ReplaceAll(name, "_", " ")
 	name = strings.ReplaceAll(name, ".", " ")
 
-	// Удаляем сезоны и части
-	for _, re := range seasonRegexes {
-		name = re.ReplaceAllString(name, " ")
-	}
+	// Удаляем части ДО сезонов, чтобы Part 2 удалялся целиком
 	for _, re := range partRegexes {
 		name = re.ReplaceAllString(name, " ")
 	}
 	name = romanPartRegex.ReplaceAllString(name, " ")
+
+	for _, re := range seasonRegexes {
+		name = re.ReplaceAllString(name, " ")
+	}
 	name = romanSeasonRegex.ReplaceAllString(name, " ")
 
 	name = garbageRegex.ReplaceAllString(name, " ")
@@ -248,8 +250,15 @@ func HasExplicitSeason(s string) (int, bool) {
 		return 0, true
 	}
 
+	// Очищаем части/куры (Part 2, Часть 2), чтобы номер части не принимался за номер сезона
+	sClean := s
+	for _, re := range partRegexes {
+		sClean = re.ReplaceAllString(sClean, " ")
+	}
+	sClean = romanPartRegex.ReplaceAllString(sClean, " ")
+
 	for _, re := range seasonRegexes {
-		matches := re.FindStringSubmatch(s)
+		matches := re.FindStringSubmatch(sClean)
 		if len(matches) > 1 {
 			if val, err := strconv.Atoi(matches[1]); err == nil {
 				return val, true
@@ -257,7 +266,7 @@ func HasExplicitSeason(s string) (int, bool) {
 		}
 	}
 	// Проверяем римские цифры сезона (например, Mushoku Tensei ... II)
-	matches := romanSeasonRegex.FindStringSubmatch(s)
+	matches := romanSeasonRegex.FindStringSubmatch(sClean)
 	if len(matches) > 1 {
 		if val := parseRomanNumeral(matches[1]); val > 0 {
 			return val, true
