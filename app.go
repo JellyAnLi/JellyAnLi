@@ -13,6 +13,7 @@ import (
 
 	"jelly-an-li/internal/config"
 	"jelly-an-li/internal/linker"
+	"jelly-an-li/internal/providers"
 )
 
 // ClientSubscriber представляет подписчика на события с приоритетным каналом статуса
@@ -27,6 +28,7 @@ type App struct {
 	config             *config.Config
 	configPath         string
 	statePath          string
+	configDir          string
 	syncMutex          sync.Mutex
 	ticker             *time.Ticker
 	tickerStop         chan struct{}
@@ -59,8 +61,11 @@ func (a *App) startup() {
 			configDir = filepath.Dir(execPath)
 		}
 	}
+	a.configDir = configDir
 	a.configPath = filepath.Join(configDir, "config.json")
 	a.statePath = filepath.Join(configDir, "state.json")
+
+	providers.SetCacheDir(configDir)
 
 	fmt.Printf("Starting Jellyfin Anime Linker. Config path: %s\n", a.configPath)
 
@@ -346,6 +351,40 @@ func (a *App) ClearLogs() {
 	a.logs = a.logs[:0]
 	a.logsMutex.Unlock()
 	a.notifyLogsReset()
+}
+
+// CacheInfo содержит сводные данные о кэшах приложения
+type CacheInfo struct {
+	ShikimoriCount  int `json:"shikimori_count"`
+	AniListCount    int `json:"anilist_count"`
+	AniDBCount      int `json:"anidb_count"`
+	TotalMetaCount  int `json:"total_meta_count"`
+	StateFilesCount int `json:"state_files_count"`
+}
+
+// GetCacheInfo возвращает актуальную статистику по кэшу метаданных и состоянию
+func (a *App) GetCacheInfo() CacheInfo {
+	stats := providers.GetCacheStats()
+	stateCount := linker.GetStateFilesCount(a.statePath)
+	return CacheInfo{
+		ShikimoriCount:  stats.ShikimoriCount,
+		AniListCount:    stats.AniListCount,
+		AniDBCount:      stats.AniDBCount,
+		TotalMetaCount:  stats.TotalCount,
+		StateFilesCount: stateCount,
+	}
+}
+
+// ClearCache очищает кэш метаданных провайдеров и/или файл состояния связей
+func (a *App) ClearCache(clearMetadata bool, clearState bool) {
+	if clearMetadata {
+		providers.ClearAllCaches()
+		a.log("🧹 Кэш метаданных провайдеров (Shikimori, AniList, AniDB) очищен.")
+	}
+	if clearState {
+		_ = os.Remove(a.statePath)
+		a.log("🧹 Кэш состояния связей (state.json) удален.")
+	}
 }
 
 // IsSyncing возвращает текущий статус синхронизации

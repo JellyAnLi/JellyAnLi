@@ -12,7 +12,13 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['sync', 'dry-run', 'clear'])
+const emit = defineEmits(['sync', 'dry-run', 'clear', 'resync-clear'])
+
+function handleResyncClear() {
+  if (confirm('Сбросить сохранённый кэш метаданных и состояния и выполнить полную синхронизацию заново?')) {
+    emit('resync-clear')
+  }
+}
 
 const logContainer = ref(null)
 const filterTab = ref('all') // 'all' | 'changes' | 'errors'
@@ -491,6 +497,13 @@ function formatFiles(count) {
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           Dry Run
+        </button>
+
+        <button class="btn btn-secondary" :disabled="syncing" @click="handleResyncClear" title="Сбросить кэш метаданных и состояния и выполнить полную пересинхронизацию всех раздач">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+          Перекачать всё
         </button>
 
         <button class="btn btn-danger" @click="emit('clear')" title="Очистить лог">

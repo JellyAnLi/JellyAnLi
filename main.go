@@ -190,6 +190,48 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 		})
 
+		mux.HandleFunc("/api/cache/stats", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if r.Method != http.MethodGet {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			json.NewEncoder(w).Encode(myApp.GetCacheInfo())
+		})
+
+		mux.HandleFunc("/api/cache/clear", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if r.Method != http.MethodPost {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			var req struct {
+				ClearMetadata bool `json:"clear_metadata"`
+				ClearState    bool `json:"clear_state"`
+				Resync        bool `json:"resync"`
+				DryRun        bool `json:"dry_run"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+
+			// Если ничего явно не указано, очищаем и метаданные, и состояние
+			if !req.ClearMetadata && !req.ClearState {
+				req.ClearMetadata = true
+				req.ClearState = true
+			}
+
+			myApp.ClearCache(req.ClearMetadata, req.ClearState)
+
+			if req.Resync {
+				go myApp.RunSync(req.DryRun)
+			}
+
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "ok",
+				"resync":  req.Resync,
+				"dry_run": req.DryRun,
+			})
+		})
+
 		mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			if r.Method != http.MethodGet {

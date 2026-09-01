@@ -1,16 +1,24 @@
 <script setup>
 import { reactive, watch, ref, onMounted } from 'vue'
 import FolderBrowserModal from './FolderBrowserModal.vue'
-import { GetVersion } from '../api.js'
+import { GetVersion, GetCacheStats, ClearCache } from '../api.js'
 
 const props = defineProps({
   config: {
     type: Object,
     required: true
+  },
+  syncing: {
+    type: Boolean,
+    default: false
+  },
+  serverOnline: {
+    type: Boolean,
+    default: true
   }
 })
 
-const emit = defineEmits(['save'])
+const emit = defineEmits(['save', 'sync', 'toast'])
 
 const ALL_PROVIDERS = [
   {
@@ -58,6 +66,64 @@ const currentModalInitialPath = ref('')
 const versionData = ref(null)
 const checkingUpdate = ref(false)
 
+// Состояние кэша
+const cacheStats = ref(null)
+const clearingCache = ref(false)
+
+async function loadCacheStats() {
+  try {
+    const stats = await GetCacheStats()
+    if (stats) cacheStats.value = stats
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+async function handleClearMetadataOnly() {
+  if (!props.serverOnline) {
+    emit('toast', 'Сервер недоступен. Дождитесь переподключения.', 'error')
+    return
+  }
+  clearingCache.value = true
+  try {
+    await ClearCache({ clear_metadata: true, clear_state: false, resync: false })
+    await loadCacheStats()
+    emit('toast', 'Кэш метаданных (Shikimori / AniList / AniDB) успешно очищен!', 'success')
+  } catch (e) {
+    emit('toast', 'Ошибка очистки кэша: ' + e, 'error')
+  } finally {
+    clearingCache.value = false
+  }
+}
+
+async function handleResyncWithClear(dryRun = false) {
+  if (!props.serverOnline) {
+    emit('toast', 'Сервер недоступен. Дождитесь переподключения.', 'error')
+    return
+  }
+  if (props.syncing) return
+
+  const actionMsg = dryRun
+    ? 'Сбросить кэш метаданных и состояния и запустить предпросмотр (Dry-Run)?'
+    : 'Сбросить сохранённый кэш метаданных и состояние и выполнить полную пересинхронизацию всех раздач?'
+
+  if (!confirm(actionMsg)) {
+    return
+  }
+
+  clearingCache.value = true
+  try {
+    await ClearCache({ clear_metadata: true, clear_state: true, resync: true, dry_run: dryRun })
+    await loadCacheStats()
+    emit('toast', dryRun ? 'Кэш сброшен. Запущен предпросмотр...' : 'Кэш сброшен. Запущена полная пересинхронизация!', 'success')
+    emit('sync', dryRun)
+  } catch (e) {
+    emit('toast', 'Ошибка сброса кэша: ' + e, 'error')
+  } finally {
+    clearingCache.value = false
+  }
+}
+
 async function checkUpdates(force = true) {
   checkingUpdate.value = true
   try {
@@ -72,6 +138,7 @@ async function checkUpdates(force = true) {
 
 onMounted(() => {
   checkUpdates(false)
+  loadCacheStats()
 })
 
 // Синхронизируем при изменении props
@@ -526,6 +593,98 @@ function handleSave() {
         />
         <span class="input-suffix">минут (0 для отключения фонового таймера)</span>
       </div>
+    </div>
+  </div>
+
+  <!-- Карточка: Кэш метаданных и состояние связей -->
+  <div class="card">
+    <div class="card-title" style="display: flex; align-items: center; justify-content: space-between;">
+      <span>Кэш метаданных и состояние связей</span>
+      <button
+        class="btn-icon"
+        @click="loadCacheStats"
+        title="Обновить статистику кэша"
+        type="button"
+        style="padding: 4px; width: 26px; height: 26px;"
+      >
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="card-subtitle">Локально сохранённые ответы баз аниме и кэш проверенных файлов</div>
+
+    <!-- Блок со счетчиками -->
+    <div v-if="cacheStats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 12px 0;">
+      <div style="background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 12px; text-align: center;">
+        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Shikimori</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">{{ cacheStats.shikimori_count }}</div>
+      </div>
+      <div style="background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 12px; text-align: center;">
+        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">AniList</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">{{ cacheStats.anilist_count }}</div>
+      </div>
+      <div style="background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 12px; text-align: center;">
+        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">AniDB</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">{{ cacheStats.anidb_count }}</div>
+      </div>
+      <div style="background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 12px; text-align: center;">
+        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">State.json</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--text-accent); margin-top: 2px;">{{ cacheStats.state_files_count }}</div>
+      </div>
+    </div>
+
+    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.45;">
+      Если названия распознались неверно из-за старого кэша или сбоя в базе, вы можете сбросить кэш и перекачать информацию о тайтлах заново без необходимости вручную удалять файлы на сервере.
+    </p>
+
+    <!-- Кнопки управления кэшем -->
+    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+      <button
+        class="btn btn-secondary"
+        @click="handleClearMetadataOnly"
+        :disabled="clearingCache"
+        type="button"
+        style="font-size: 0.85rem; padding: 7px 14px;"
+        title="Удаляет только кэшированные ответы Shikimori, AniList и AniDB"
+      >
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 4px;">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        Очистить кэш баз
+      </button>
+
+      <button
+        class="btn btn-secondary"
+        @click="handleResyncWithClear(true)"
+        :disabled="clearingCache || syncing"
+        type="button"
+        style="font-size: 0.85rem; padding: 7px 14px;"
+        title="Очищает кэш метаданных и состояние и показывает предпросмотр (Dry Run)"
+      >
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 4px;">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        Сбросить кэш и Dry Run
+      </button>
+
+      <button
+        class="btn btn-primary"
+        @click="handleResyncWithClear(false)"
+        :disabled="clearingCache || syncing"
+        type="button"
+        style="font-size: 0.85rem; padding: 7px 14px; background: #dc2626; border-color: #dc2626;"
+        title="Очищает все кэши (метаданные + state.json) и запускает полную синхронизацию заново"
+      >
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 4px;">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+        </svg>
+        Сбросить всё и перекачать мету
+      </button>
     </div>
   </div>
 

@@ -1,4 +1,3 @@
-name: jellyanli
 services:
   jellyanli:
     command: null
@@ -14,9 +13,9 @@ services:
       PUID: "1000"
       PORT: "37773"
       TZ: Europe/Moscow
-    image: ghcr.io/jellyanli/jellyanli:beta
+    image: ghcr.io/jellyanli/jellyanli:latest
     labels:
-      icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/jellyfin.svg
+      icon: https://raw.githubusercontent.com/JellyAnLi/JellyAnLi/refs/heads/main/frontend/public/logo-256px.jpg
     network_mode: bridge
     ports:
       - target: 37773
@@ -29,29 +28,20 @@ services:
         target: /config
       - type: bind
         source: /media/FileStorage
-        target: /media
+        target: /DATA
 x-casaos:
-  app_id: jellyanli
-  architectures:
-    - amd64
-    - arm64
-  main: jellyanli
+  description:
+    en_US: Jellyfin Anime Linker - utility for creating symlinks for anime torrent
+      downloads to Jellyfin library format.
+    ru_RU: Утилита для автоматического создания символических ссылок аниме-торрентов
+      под структуру Jellyfin.
+  hostname: 192.168.1.123
+  icon: https://raw.githubusercontent.com/JellyAnLi/JellyAnLi/refs/heads/main/frontend/public/logo-256px.jpg
   index: /
   is_uncontrolled: false
+  main: jellyanli
   port_map: "37773"
   scheme: http
-  store_app_id: jellyanli
   title:
     custom: JellyAnLi
     en_US: JellyAnLi
-    ru_RU: JellyAnLi
-  author: JellyAnLi
-  category: Media
-  description:
-    en_US: Jellyfin Anime Linker - utility for creating symlinks for anime torrent downloads to Jellyfin library format.
-    ru_RU: Утилита для автоматического создания символических ссылок аниме-торрентов под структуру Jellyfin.
-  tagline:
-    en_US: Jellyfin Anime Linker
-    ru_RU: Структурирование аниме-торрентов для Jellyfin
-  thumbnail: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/jellyfin.svg
-  version: 1.0.0

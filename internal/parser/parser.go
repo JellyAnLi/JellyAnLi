@@ -46,7 +46,7 @@ var (
 	// Регулярные выражения для очистки скобок и мусора
 	bracketsRegex = regexp.MustCompile(`\[[^\]]*\]|\([^\)]*\)`)
 	spacesRegex   = regexp.MustCompile(`\s+`)
-	garbageRegex  = regexp.MustCompile(`(?i)\b(1080p|720p|480p|bdrip|web-dl|webrip|web|h264|h265|hevc|x264|x265|avc|aac|flac|mp3|dual-audio|multi-audio|rus|eng|jpn|raw|sub|dub|cr|crunchyroll|netflix|rutracker|nnmclub|mp4|mkv|avi|tag|19\d{2}|20\d{2}|erai-raws|subsplease|horriblesubs|judas|cleo|pas|ember|reaktor|asw|chibi|kametsu|vcb-studio|moozzi2|sofcj-raws|kawaiika-raws|varyg|jannyy)\b`)
+	garbageRegex  = regexp.MustCompile(`(?i)\b(1080p|720p|480p|bdrip|web-dl|webrip|web|h264|h265|hevc|x264|x265|avc|aac|flac|mp3|truehd|atmos|dts(?:-hd)?|10bit|8bit|hi10p|dual-audio|multi-audio|rus|eng|jpn|raw|sub|dub|cr|crunchyroll|netflix|rutracker|nnmclub|mp4|mkv|avi|tag|rev\d*|v\d+|repack|remux|remastered|uncut|uncensored|batch|19\d{2}|20\d{2}|erai-raws|subsplease|horriblesubs|judas|cleo|pas|ember|reaktor|asw|chibi|kametsu|vcb-studio|moozzi2|sofcj-raws|kawaiika-raws|varyg|jannyy)\b`)
 	releaseGroupPrefixRegex = regexp.MustCompile(`^(?i)(?:erai-raws|subsplease|horriblesubs|erai_raws|judas|cleo|pas|ember|reaktor|asw|chibi|kametsu|vcb-studio|moozzi2|sofcj-raws|kawaiika-raws|varyg)[-._\s]+`)
 	moviePrefixRegex        = regexp.MustCompile(`^(?i)(?:eiga|gekijouban|gekijou-ban|movie|фильм)[-._\s]+`)
 	movieKeywordsRegex      = regexp.MustCompile(`(?i)(?:\b(?:movie|film|films|фильм|фильмы|gekijouban|gekijou-ban|eiga)\b|g劇)`)
@@ -135,18 +135,21 @@ func CleanShowName(folderName string) string {
 	name = moviePrefixRegex.ReplaceAllString(name, "")
 	name = extraTagsRegex.ReplaceAllString(name, " ")
 
+	// Заменяем разделители _ и . на пробелы ДО regex, сохраняя дефисы для тегов вроде web-dl
+	name = strings.ReplaceAll(name, "_", " ")
+	name = strings.ReplaceAll(name, ".", " ")
+
 	for _, re := range seasonRegexes {
 		name = re.ReplaceAllString(name, " ")
 	}
 	for _, re := range partRegexes {
 		name = re.ReplaceAllString(name, " ")
 	}
+	name = romanPartRegex.ReplaceAllString(name, " ")
 	name = romanSeasonRegex.ReplaceAllString(name, " ")
 
 	name = garbageRegex.ReplaceAllString(name, " ")
 
-	name = strings.ReplaceAll(name, "_", " ")
-	name = strings.ReplaceAll(name, ".", " ")
 	name = strings.ReplaceAll(name, "-", " ")
 	name = spacesRegex.ReplaceAllString(name, " ")
 	name = strings.TrimSpace(name)
@@ -165,18 +168,21 @@ func ExtractShowNameFromFile(fileName string) string {
 	name := bracketsRegex.ReplaceAllString(base, " ")
 	name = extraTagsRegex.ReplaceAllString(name, " ")
 
-	// Удаляем сезоны
+	// Заменяем разделители _ и . на пробелы ДО regex
+	name = strings.ReplaceAll(name, "_", " ")
+	name = strings.ReplaceAll(name, ".", " ")
+
+	// Удаляем сезоны и части
 	for _, re := range seasonRegexes {
 		name = re.ReplaceAllString(name, " ")
 	}
 	for _, re := range partRegexes {
 		name = re.ReplaceAllString(name, " ")
 	}
+	name = romanPartRegex.ReplaceAllString(name, " ")
 	name = romanSeasonRegex.ReplaceAllString(name, " ")
 
 	name = garbageRegex.ReplaceAllString(name, " ")
-	name = strings.ReplaceAll(name, "_", " ")
-	name = strings.ReplaceAll(name, ".", " ")
 	name = strings.ReplaceAll(name, "-", " ")
 
 	// Очищаем лишние пробелы перед делением на слова
@@ -203,8 +209,18 @@ func CleanQueryForSearch(query string) string {
 	cleaned := releaseGroupPrefixRegex.ReplaceAllString(query, " ")
 	cleaned = bracketsRegex.ReplaceAllString(cleaned, " ")
 	cleaned = moviePrefixRegex.ReplaceAllString(cleaned, " ")
-	cleaned = garbageRegex.ReplaceAllString(cleaned, " ")
 	cleaned = extraTagsRegex.ReplaceAllString(cleaned, " ")
+
+	cleaned = strings.ReplaceAll(cleaned, "_", " ")
+	cleaned = strings.ReplaceAll(cleaned, ".", " ")
+
+	for _, re := range partRegexes {
+		cleaned = re.ReplaceAllString(cleaned, " ")
+	}
+	cleaned = romanPartRegex.ReplaceAllString(cleaned, " ")
+
+	cleaned = garbageRegex.ReplaceAllString(cleaned, " ")
+	cleaned = strings.ReplaceAll(cleaned, "-", " ")
 	cleaned = spacesRegex.ReplaceAllString(cleaned, " ")
 	return strings.TrimSpace(cleaned)
 }

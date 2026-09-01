@@ -53,3 +53,18 @@ func (s *SyncState) Save(path string) error {
 
 	return os.WriteFile(path, data, 0644)
 }
+
+// GetStateFilesCount возвращает количество отслеживаемых файлов в state.json
+func GetStateFilesCount(statePath string) int {
+	st, err := LoadState(statePath)
+	if err != nil || st == nil {
+		return 0
+	}
+	return len(st.Files)
+}
+
+// ClearState удаляет файл состояния
+func ClearState(statePath string) error {
+	return os.Remove(statePath)
+}
+

@@ -44,6 +44,22 @@ export async function GetStatus() {
   return data.syncing // true или false
 }
 
+export async function GetCacheStats() {
+  const res = await fetch('/api/cache/stats')
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function ClearCache({ clear_metadata = true, clear_state = true, resync = false, dry_run = false } = {}) {
+  const res = await fetch('/api/cache/clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clear_metadata, clear_state, resync, dry_run })
+  })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
 export async function GetVersion(force = false) {
   const res = await fetch(`/api/version${force ? '?force=true' : ''}`)
   if (!res.ok) throw new Error(await res.text())
