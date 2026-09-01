@@ -138,3 +138,76 @@ func TestShikimoriScoringBlackCloverMovie(t *testing.T) {
 	}
 }
 
+func TestShikimoriFateZeroCached(t *testing.T) {
+	restore := SetShikimoriCacheForTest(map[string]CachedShikimoriInfo{
+		"Fate Zero": {
+			Russian:   "Судьба/Начало",
+			Romaji:    "Fate/Zero",
+			ShowRu:    "Судьба/Начало",
+			Season:    1,
+			IsMovie:   false,
+			IsSpecial: false,
+		},
+	})
+	defer restore()
+
+	prov := Get("shikimori")
+	meta, err := prov.Search("Fate Zero", "")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if meta == nil {
+		t.Fatalf("expected metadata result")
+	}
+	if meta.ShowTitleRu != "Судьба/Начало" {
+		t.Errorf("expected ShowTitleRu 'Судьба/Начало', got '%s'", meta.ShowTitleRu)
+	}
+	if meta.Season != 1 {
+		t.Errorf("expected Season 1, got %d", meta.Season)
+	}
+	if meta.IsMovie || meta.IsSpecial {
+		t.Errorf("expected regular TV series, got movie=%v, special=%v", meta.IsMovie, meta.IsSpecial)
+	}
+}
+
+func TestClearAllCachesAndStats(t *testing.T) {
+	// Добавляем тестовые данные в кэш
+	cache := loadAniListCache()
+	aniListCacheLock.Lock()
+	cache.Entries["Test AniList Title"] = CachedAniListInfo{
+		TitleRomaji: "Test Title",
+		Season:      1,
+	}
+	aniListCacheLock.Unlock()
+
+	dbCache := loadAniDBCache()
+	aniDBCacheLock.Lock()
+	dbCache.Entries["Test AniDB Title"] = CachedAniDBInfo{
+		TitleRomaji: "Test Title AniDB",
+		Season:      1,
+	}
+	aniDBCacheLock.Unlock()
+
+	shikiCache := loadShikimoriCache()
+	shikimoriCacheLock.Lock()
+	shikiCache.Translations["Test Shikimori Title"] = CachedShikimoriInfo{
+		Russian: "Тестовое аниме",
+		Season:  1,
+	}
+	shikimoriCacheLock.Unlock()
+
+	stats := GetCacheStats()
+	if stats.AniListCount < 1 || stats.AniDBCount < 1 || stats.ShikimoriCount < 1 {
+		t.Errorf("expected cache stats to have at least 1 in each provider, got %+v", stats)
+	}
+
+	ClearAllCaches()
+
+	statsAfter := GetCacheStats()
+	if statsAfter.AniListCount != 0 || statsAfter.AniDBCount != 0 || statsAfter.ShikimoriCount != 0 {
+		t.Errorf("expected all cache counts to be 0 after ClearAllCaches, got %+v", statsAfter)
+	}
+}
+
+
+

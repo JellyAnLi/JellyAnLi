@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	aniDBCacheFile = "data/anidb_cache.json"
 	aniDBUserAgent = "JellyAnLi/1.0 (Anime Media Linker for Jellyfin; +https://github.com/JellyAnLi/JellyAnLi)"
 )
 
 var (
+	aniDBCacheFile = "data/anidb_cache.json"
 	aniDBCacheLock sync.Mutex
 	aniDBCacheInst *AniDBCache
 	aniDBLastReq   time.Time
@@ -54,6 +54,30 @@ func loadAniDBCache() *AniDBCache {
 	}
 	aniDBCacheInst = c
 	return c
+}
+
+func SetAniDBCacheDir(dir string) {
+	aniDBCacheLock.Lock()
+	defer aniDBCacheLock.Unlock()
+	aniDBCacheFile = filepath.Join(dir, "anidb_cache.json")
+	aniDBCacheInst = nil
+}
+
+func ClearAniDBCache() {
+	aniDBCacheLock.Lock()
+	aniDBCacheInst = &AniDBCache{Entries: make(map[string]CachedAniDBInfo)}
+	fileToRemove := aniDBCacheFile
+	aniDBCacheLock.Unlock()
+
+	_ = os.Remove(fileToRemove)
+	_ = os.Remove("data/anidb_cache.json")
+}
+
+func GetAniDBCacheCount() int {
+	c := loadAniDBCache()
+	aniDBCacheLock.Lock()
+	defer aniDBCacheLock.Unlock()
+	return len(c.Entries)
 }
 
 func saveAniDBCache(c *AniDBCache) error {

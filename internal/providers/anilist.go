@@ -98,6 +98,30 @@ func loadAniListCache() *AniListCache {
 	return c
 }
 
+func SetAniListCacheDir(dir string) {
+	aniListCacheLock.Lock()
+	defer aniListCacheLock.Unlock()
+	aniListCacheFile = filepath.Join(dir, "anilist_cache.json")
+	aniListCacheInst = nil
+}
+
+func ClearAniListCache() {
+	aniListCacheLock.Lock()
+	aniListCacheInst = &AniListCache{Entries: make(map[string]CachedAniListInfo)}
+	fileToRemove := aniListCacheFile
+	aniListCacheLock.Unlock()
+
+	_ = os.Remove(fileToRemove)
+	_ = os.Remove("data/anilist_cache.json")
+}
+
+func GetAniListCacheCount() int {
+	c := loadAniListCache()
+	aniListCacheLock.Lock()
+	defer aniListCacheLock.Unlock()
+	return len(c.Entries)
+}
+
 func saveAniListCache(c *AniListCache) error {
 	aniListCacheLock.Lock()
 	defer aniListCacheLock.Unlock()

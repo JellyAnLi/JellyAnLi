@@ -1577,6 +1577,48 @@ func TestMoviesRomajiMode(t *testing.T) {
 	}
 }
 
+func TestFateZeroLinkerPlan(t *testing.T) {
+	shows := []*parser.AnimeShow{
+		{
+			OriginalName: "[Beatrice-Raws] Fate Zero Part I [BDRip 1920x1080 HEVC TrueHD]_rev",
+			CleanedName:  "Fate Zero",
+			RussianName:  "Судьба/Начало",
+			RomajiName:   "Fate/Zero",
+			Season:       1,
+			Part:         1,
+			IsMovie:      false,
+			Files: []*parser.EpisodeFile{
+				{
+					SourcePath: "/torrents/Fate Zero/Fate Zero - 01.mkv",
+					EpisodeNum: 1,
+					SeasonNum:  1,
+					Type:       parser.TypeVideo,
+				},
+			},
+		},
+	}
+
+	cfg := &config.Config{
+		LibraryDir:       "/media/Anime",
+		FolderNamingMode: "russian",
+	}
+
+	plan := GeneratePlan(shows, cfg)
+	if len(plan) != 1 {
+		t.Fatalf("expected 1 link operation, got %d", len(plan))
+	}
+
+	expectedDir := filepath.Join("/media/Anime", "Судьба Начало", "Season 01")
+	if filepath.Dir(plan[0].TargetPath) != expectedDir {
+		t.Errorf("expected folder '%s', got '%s'", expectedDir, filepath.Dir(plan[0].TargetPath))
+	}
+	expectedFile := filepath.Join(expectedDir, "Fate Zero S01E01.mkv")
+	if plan[0].TargetPath != expectedFile {
+		t.Errorf("expected target path '%s', got '%s'", expectedFile, plan[0].TargetPath)
+	}
+}
+
+
 
 
 

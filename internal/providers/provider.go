@@ -64,3 +64,38 @@ var stopWords = map[string]bool{
 func isStopWord(w string) bool {
 	return stopWords[strings.ToLower(w)] || len(w) < 2
 }
+
+// SetCacheDir устанавливает рабочую директорию для файлов кэша всех провайдеров
+func SetCacheDir(dir string) {
+	SetShikimoriCacheDir(dir)
+	SetAniListCacheDir(dir)
+	SetAniDBCacheDir(dir)
+}
+
+// ClearAllCaches очищает кэш всех провайдеров (в памяти и на диске)
+func ClearAllCaches() {
+	ClearShikimoriCache()
+	ClearAniListCache()
+	ClearAniDBCache()
+}
+
+// ProviderCacheStats содержит статистику по количеству закэшированных тайтлов
+type ProviderCacheStats struct {
+	ShikimoriCount int `json:"shikimori_count"`
+	AniListCount   int `json:"anilist_count"`
+	AniDBCount     int `json:"anidb_count"`
+	TotalCount     int `json:"total_count"`
+}
+
+// GetCacheStats возвращает количество записей в кэше каждого провайдера
+func GetCacheStats() ProviderCacheStats {
+	shiki := GetShikimoriCacheCount()
+	anilist := GetAniListCacheCount()
+	anidb := GetAniDBCacheCount()
+	return ProviderCacheStats{
+		ShikimoriCount: shiki,
+		AniListCount:   anilist,
+		AniDBCount:     anidb,
+		TotalCount:     shiki + anilist + anidb,
+	}
+}

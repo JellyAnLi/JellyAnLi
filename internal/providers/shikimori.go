@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -64,7 +63,15 @@ type ShikimoriNode struct {
 	Date    int64  `json:"date"`
 }
 
+type ShikimoriLink struct {
+	ID       int    `json:"id"`
+	SourceID int    `json:"source_id"`
+	TargetID int    `json:"target_id"`
+	Relation string `json:"relation"`
+}
+
 type ShikimoriFranchise struct {
+	Links []ShikimoriLink `json:"links"`
 	Nodes []ShikimoriNode `json:"nodes"`
 }
 
@@ -134,6 +141,30 @@ func loadShikimoriCache() *ShikimoriCache {
 	}
 	shikimoriCacheInst = c
 	return c
+}
+
+func SetShikimoriCacheDir(dir string) {
+	shikimoriCacheLock.Lock()
+	defer shikimoriCacheLock.Unlock()
+	shikimoriCacheFile = filepath.Join(dir, "shikimori_cache.json")
+	shikimoriCacheInst = nil
+}
+
+func ClearShikimoriCache() {
+	shikimoriCacheLock.Lock()
+	shikimoriCacheInst = &ShikimoriCache{Translations: make(map[string]CachedShikimoriInfo)}
+	fileToRemove := shikimoriCacheFile
+	shikimoriCacheLock.Unlock()
+
+	_ = os.Remove(fileToRemove)
+	_ = os.Remove("data/shikimori_cache.json")
+}
+
+func GetShikimoriCacheCount() int {
+	c := loadShikimoriCache()
+	shikimoriCacheLock.Lock()
+	defer shikimoriCacheLock.Unlock()
+	return len(c.Translations)
 }
 
 func saveShikimoriCache(c *ShikimoriCache) error {
@@ -416,46 +447,80 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 				if err == nil {
 					var franchise ShikimoriFranchise
 					if err := json.Unmarshal(fBody, &franchise); err == nil {
-						hasTV := false
+						nodesMap := make(map[int]ShikimoriNode)
 						for _, node := range franchise.Nodes {
-							k := strings.ToLower(node.Kind)
-							if k == "tv" || strings.Contains(k, "tv") || strings.Contains(strings.ToLower(node.Kind), "сериал") {
-								hasTV = true
-								break
-							}
+							nodesMap[node.ID] = node
 						}
-
-						var tvNodes []ShikimoriNode
-						for _, node := range franchise.Nodes {
-							k := strings.ToLower(node.Kind)
-							isTV := k == "tv" || strings.Contains(k, "tv") || strings.Contains(strings.ToLower(node.Kind), "сериал")
-							if isTV || (!hasTV && k == "ona") {
-								tvNodes = append(tvNodes, node)
-							}
-						}
-						sort.Slice(tvNodes, func(i, j int) bool {
-							return tvNodes[i].Date < tvNodes[j].Date
-						})
 
 						if !isMovie {
-							for idx, node := range tvNodes {
-								if node.ID == targetAnime.ID {
-									seasonNum = idx + 1
-									if len(tvNodes) > 0 {
-										rootClean := cleanRussianSeason(tvNodes[0].Name)
-										if rootClean != "" {
-											russianName = rootClean
+							// Вычисляем сезон и корневое название, следуя по цепочке приквелов (prequel / parent_story / full_story)
+							currentID := targetAnime.ID
+							visited := make(map[int]bool)
+							visited[currentID] = true
+							prequelCount := 0
+							rootID := currentID
+
+							for {
+								foundPrequel := false
+								for _, link := range franchise.Links {
+									rel := strings.ToLower(link.Relation)
+									var candidateID int
+									if link.SourceID == currentID && (rel == "prequel" || rel == "parent_story" || rel == "full_story") {
+										candidateID = link.TargetID
+									} else if link.TargetID == currentID && rel == "sequel" {
+										candidateID = link.SourceID
+									}
+
+									if candidateID > 0 && !visited[candidateID] {
+										if node, ok := nodesMap[candidateID]; ok {
+											k := strings.ToLower(node.Kind)
+											isSeries := k == "tv" || strings.Contains(k, "tv") || strings.Contains(strings.ToLower(node.Kind), "сериал") || k == "ona"
+											if isSeries {
+												visited[candidateID] = true
+												currentID = candidateID
+												rootID = candidateID
+												prequelCount++
+												foundPrequel = true
+												break
+											}
 										}
 									}
+								}
+								if !foundPrequel {
 									break
 								}
 							}
+
+							if prequelCount > 0 {
+								seasonNum = prequelCount + 1
+								if rootNode, ok := nodesMap[rootID]; ok {
+									rootClean := cleanRussianSeason(rootNode.Name)
+									if rootClean != "" {
+										russianName = rootClean
+									}
+								}
+							}
 						} else {
-							// Для фильма: если во франшизе есть основной сериал, используем его корневое русское название для папки
-							if len(tvNodes) > 0 {
-								rootClean := cleanRussianSeason(tvNodes[0].Name)
-								if rootClean != "" {
-									russianName = rootClean
+							// Для фильма: если есть связь с родительским сериалом через parent_story / prequel / full_story
+							for _, link := range franchise.Links {
+								rel := strings.ToLower(link.Relation)
+								var parentID int
+								if link.SourceID == targetAnime.ID && (rel == "parent_story" || rel == "full_story" || rel == "prequel") {
+									parentID = link.TargetID
+								} else if link.TargetID == targetAnime.ID && rel == "side_story" {
+									parentID = link.SourceID
+								}
+								if parentID > 0 {
+									if node, ok := nodesMap[parentID]; ok {
+										k := strings.ToLower(node.Kind)
+										if k == "tv" || strings.Contains(k, "tv") || strings.Contains(strings.ToLower(node.Kind), "сериал") || k == "ona" {
+											rootClean := cleanRussianSeason(node.Name)
+											if rootClean != "" {
+												russianName = rootClean
+											}
+											break
+										}
+									}
 								}
 							}
 						}

@@ -517,3 +517,49 @@ func TestFiveExamplesFromInputLog(t *testing.T) {
 	}
 }
 
+func TestFateZeroPartI(t *testing.T) {
+	folder := "[Beatrice-Raws] Fate Zero Part I [BDRip 1920x1080 HEVC TrueHD]_rev"
+	files := []string{
+		"[Beatrice-Raws] Fate Zero Part I - 01 [BDRip 1920x1080 HEVC TrueHD]_rev.mkv",
+		"[Beatrice-Raws] Fate Zero Part I - 13 [BDRip 1920x1080 HEVC TrueHD]_rev.mkv",
+	}
+
+	cleaned := CleanShowName(folder)
+	if cleaned != "Fate Zero" {
+		t.Errorf("expected CleanShowName to return 'Fate Zero', got %q", cleaned)
+	}
+
+	searchQuery := CleanQueryForSearch(folder)
+	if searchQuery != "Fate Zero" {
+		t.Errorf("expected CleanQueryForSearch to return 'Fate Zero', got %q", searchQuery)
+	}
+
+	season := ExtractSeason(folder)
+	if season != 1 {
+		t.Errorf("expected ExtractSeason to return 1, got %d", season)
+	}
+
+	part := ExtractPart(folder)
+	if part != 1 {
+		t.Errorf("expected ExtractPart to return 1, got %d", part)
+	}
+
+	show := ParseShowFolder(folder, files, nil)
+	if show.CleanedName != "Fate Zero" {
+		t.Errorf("expected show.CleanedName to be 'Fate Zero', got %q", show.CleanedName)
+	}
+	if show.Season != 1 {
+		t.Errorf("expected show.Season to be 1, got %d", show.Season)
+	}
+	if len(show.Files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(show.Files))
+	}
+	if show.Files[0].SeasonNum != 1 || show.Files[0].EpisodeNum != 1 {
+		t.Errorf("file 0 expected S01E01, got S%02dE%02d", show.Files[0].SeasonNum, show.Files[0].EpisodeNum)
+	}
+	if show.Files[1].SeasonNum != 1 || show.Files[1].EpisodeNum != 13 {
+		t.Errorf("file 1 expected S01E13, got S%02dE%02d", show.Files[1].SeasonNum, show.Files[1].EpisodeNum)
+	}
+}
+
+

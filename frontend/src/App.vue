@@ -112,6 +112,24 @@ async function handleClearLogs() {
   }
 }
 
+// Сброс кэша и пересинхронизация
+async function handleResyncClear(dryRun = false) {
+  if (!serverOnline.value) {
+    showToast('Сервер недоступен. Дождитесь переподключения.', 'error')
+    return
+  }
+  if (syncing.value) return
+  try {
+    syncing.value = true
+    await ClearCache({ clear_metadata: true, clear_state: true, resync: true, dry_run: dryRun })
+    showToast(dryRun ? 'Кэш сброшен. Запущен предпросмотр...' : 'Кэш сброшен. Запущена полная пересинхронизация!', 'success')
+    activeTab.value = 'logs'
+  } catch (e) {
+    syncing.value = false
+    showToast('Ошибка сброса кэша: ' + e, 'error')
+  }
+}
+
 const themeMode = ref('dark') // 'dark' | 'light' | 'auto'
 
 function applyTheme(mode) {
@@ -395,7 +413,11 @@ onUnmounted(() => {
       <SettingsView
         v-if="activeTab === 'settings'"
         :config="config"
+        :syncing="syncing"
+        :server-online="serverOnline"
         @save="handleSave"
+        @sync="handleSync"
+        @toast="showToast"
       />
       <LogsView
         v-else-if="activeTab === 'logs'"
@@ -404,6 +426,7 @@ onUnmounted(() => {
         @sync="handleSync(false)"
         @dry-run="handleSync(true)"
         @clear="handleClearLogs"
+        @resync-clear="handleResyncClear(false)"
       />
     </main>
 
