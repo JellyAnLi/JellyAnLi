@@ -102,7 +102,7 @@ func processShowMetadata(show *parser.AnimeShow, rawName string, cfg *config.Con
 						f.SeasonNum = 0
 					}
 				}
-			} else if meta.Season > 1 && show.Season == 1 && !show.IsMovie {
+			} else if meta.Season > 1 && show.Season == 1 && !show.IsMovie && show.Part <= 1 {
 				show.Season = meta.Season
 				fmt.Printf("[DEBUG] linker.Scan: Calculated franchise season for '%s' -> Season %d\n", show.CleanedName, meta.Season)
 				for _, f := range show.Files {

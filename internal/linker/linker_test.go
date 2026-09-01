@@ -1676,6 +1676,33 @@ func TestEightySixLinkerPlan(t *testing.T) {
 	if plan[2].TargetPath != expectedSub {
 		t.Errorf("expected sub target '%s', got '%s'", expectedSub, plan[2].TargetPath)
 	}
+
+	// Тестируем Part 2 (должна выравниваться в Season 01 как E12..E23)
+	showPart2 := &parser.AnimeShow{
+		OriginalName: "86 - Eighty Six - Part 2 [BDRip 1080p]",
+		CleanedName:  "86 Eighty Six",
+		RussianName:  "Восемьдесят шесть",
+		RomajiName:   "86",
+		Season:       1,
+		Part:         2,
+		Files: []*parser.EpisodeFile{
+			{
+				SourcePath: "[UHA-WINGS&VCB-Studio] EIGHTY SIX [01][Ma10p_1080p].mkv",
+				EpisodeNum: 1,
+				SeasonNum:  1,
+				PartNum:    2,
+				Type:       parser.TypeVideo,
+			},
+		},
+	}
+
+	fullPlan := GeneratePlan([]*parser.AnimeShow{show, showPart2}, cfg)
+	// Part 2 episode 1 (after 11 eps of part 1) should become S01E02 (or S01E12 if part 1 had 11 eps)
+	// Here show 1 has 1 file (ep 1), so showPart2 with ep 1 shifts by 1 -> S01E02
+	expectedPart2Video := filepath.Join(expectedDir, "86 S01E02.mkv")
+	if fullPlan[3].TargetPath != expectedPart2Video {
+		t.Errorf("expected Part 2 first episode to be '%s', got '%s'", expectedPart2Video, fullPlan[3].TargetPath)
+	}
 }
 
 
