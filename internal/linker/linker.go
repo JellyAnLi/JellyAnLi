@@ -370,14 +370,7 @@ func AlignShowsPartEpisodes(shows []*parser.AnimeShow, cfg *config.Config) {
 func resolveEnglishShowName(show *parser.AnimeShow, allShows []*parser.AnimeShow) string {
 	showName := show.CleanedName
 	if show.RomajiName != "" {
-		if containsCyrillic(showName) {
-			showName = show.RomajiName
-		} else if strings.Contains(show.RomajiName, ":") {
-			parts := strings.Split(show.RomajiName, ":")
-			if strings.TrimSpace(parts[0]) != "" {
-				showName = strings.TrimSpace(parts[0])
-			}
-		}
+		showName = show.RomajiName
 	}
 	if strings.Contains(showName, ":") {
 		parts := strings.Split(showName, ":")
@@ -396,14 +389,7 @@ func resolveEnglishShowName(show *parser.AnimeShow, allShows []*parser.AnimeShow
 	for _, other := range allShows {
 		otherName := other.CleanedName
 		if other.RomajiName != "" {
-			if containsCyrillic(otherName) {
-				otherName = other.RomajiName
-			} else if strings.Contains(other.RomajiName, ":") {
-				parts := strings.Split(other.RomajiName, ":")
-				if strings.TrimSpace(parts[0]) != "" {
-					otherName = strings.TrimSpace(parts[0])
-				}
-			}
+			otherName = other.RomajiName
 		}
 		if strings.Contains(otherName, ":") {
 			parts := strings.Split(otherName, ":")

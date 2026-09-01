@@ -1618,6 +1618,66 @@ func TestFateZeroLinkerPlan(t *testing.T) {
 	}
 }
 
+func TestEightySixLinkerPlan(t *testing.T) {
+	relPath1 := "[UHA-WINGS&VCB-Studio] EIGHTY SIX [01][Ma10p_1080p][x265_flac_aac].mkv"
+	relPath2 := "Rus sound/[UHA-WINGS&VCB-Studio] EIGHTY SIX [01][Ma10p_1080p][x265_flac_aac].mka"
+	relPath3 := "Rus subs/[Crunchyroll]/[UHA-WINGS&VCB-Studio] EIGHTY SIX [01][Ma10p_1080p][x265_flac_aac].ass"
+
+	langMap := map[string]string{
+		"Rus sound": "ru",
+		"Rus subs":  "ru",
+	}
+
+	f1 := parser.ParseEpisodeFile(relPath1, 1, 1, langMap)
+	f2 := parser.ParseEpisodeFile(relPath2, 1, 1, langMap)
+	f3 := parser.ParseEpisodeFile(relPath3, 1, 1, langMap)
+
+	if f1 == nil || f1.EpisodeNum != 1 {
+		t.Fatalf("expected f1 episode 1, got %+v", f1)
+	}
+	if f2 == nil || f2.EpisodeNum != 1 {
+		t.Fatalf("expected f2 episode 1, got %+v", f2)
+	}
+	if f3 == nil || f3.EpisodeNum != 1 {
+		t.Fatalf("expected f3 episode 1, got %+v", f3)
+	}
+
+	show := &parser.AnimeShow{
+		OriginalName: "86 - Eighty Six - Part 1 [BDRip 1080p]",
+		CleanedName:  "86 Eighty Six",
+		RussianName:  "Восемьдесят шесть",
+		RomajiName:   "86",
+		Season:       1,
+		Part:         1,
+		Files:        []*parser.EpisodeFile{f1, f2, f3},
+	}
+
+	cfg := &config.Config{
+		LibraryDir:       "/media/Anime",
+		FolderNamingMode: "russian",
+	}
+
+	plan := GeneratePlan([]*parser.AnimeShow{show}, cfg)
+	if len(plan) != 3 {
+		t.Fatalf("expected 3 plan items, got %d", len(plan))
+	}
+
+	expectedDir := filepath.Join("/media/Anime", "Восемьдесят шесть", "Season 01")
+	expectedVideo := filepath.Join(expectedDir, "86 S01E01.mkv")
+	expectedAudio := filepath.Join(expectedDir, "86 S01E01.ru.mka")
+	expectedSub := filepath.Join(expectedDir, "86 S01E01.Crunchyroll.ru.ass")
+
+	if plan[0].TargetPath != expectedVideo {
+		t.Errorf("expected video target '%s', got '%s'", expectedVideo, plan[0].TargetPath)
+	}
+	if plan[1].TargetPath != expectedAudio {
+		t.Errorf("expected audio target '%s', got '%s'", expectedAudio, plan[1].TargetPath)
+	}
+	if plan[2].TargetPath != expectedSub {
+		t.Errorf("expected sub target '%s', got '%s'", expectedSub, plan[2].TargetPath)
+	}
+}
+
 
 
 

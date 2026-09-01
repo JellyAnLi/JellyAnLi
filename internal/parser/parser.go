@@ -227,8 +227,19 @@ func CleanQueryForSearch(query string) string {
 
 var (
 	specialFileRegex = regexp.MustCompile(`(?i)\b(?:special|specials|sp|ova|ona|oad|спешл|спешлы|ова)\s*[-_]?\s*(\d*)\b`)
-	bracketEpRegex   = regexp.MustCompile(`(?:^|[_\s\.-])(?:\[|\()(\d{1,3})(?:\]|\))(?:[_\s\.-]|$)`)
+	sxxEyyRegex      = regexp.MustCompile(`(?i)\bS\d{1,2}E(\d{1,4})\b`)
+	bracketEpRegex   = regexp.MustCompile(`(?i)[\[\(]\s*(?:ep|e|серия)?\s*[-_.]?\s*(\d{1,4})(?:[v_\-\.].*)?\s*[\]\)]`)
 )
+
+func isResolutionOrYear(val int) bool {
+	if val == 480 || val == 576 || val == 720 || val == 1080 || val == 2160 || val == 1920 {
+		return true
+	}
+	if val >= 1950 && val <= 2050 {
+		return true
+	}
+	return false
+}
 
 // HasExplicitSeason извлекает номер сезона и возвращает true, если сезон был явно указан в строке
 func HasExplicitSeason(s string) (int, bool) {
@@ -321,30 +332,48 @@ func ExtractEpisodeNumber(fileName string) int {
 		return 1
 	}
 
-	// 2. Проверяем серии в скобках вида "[01]" или "(01)" (характерно для AniLibria и Erai-raws)
-	if bm := bracketEpRegex.FindStringSubmatch(base); len(bm) > 1 {
-		if val, err := strconv.Atoi(bm[1]); err == nil && val > 0 && val < 1900 {
+	// 2. Проверяем явный тег S01E01 / S1E10
+	if sm := sxxEyyRegex.FindStringSubmatch(base); len(sm) > 1 {
+		if val, err := strconv.Atoi(sm[1]); err == nil && val > 0 {
 			return val
 		}
 	}
 
+	// 3. Проверяем явные указания серии в теле строки: " - 01", "EP01", "Episode 1", "01."
 	baseClean := bracketsRegex.ReplaceAllString(base, " ")
 	baseClean = strings.ReplaceAll(baseClean, "_", " ")
 
 	for _, re := range episodeRegexes {
 		matches := re.FindStringSubmatch(baseClean)
 		if len(matches) > 1 {
-			if val, err := strconv.Atoi(matches[1]); err == nil {
+			if val, err := strconv.Atoi(matches[1]); err == nil && val > 0 {
+				if !isResolutionOrYear(val) {
+					return val
+				}
+			}
+		}
+	}
+
+	// 4. Проверяем серии в скобках вида "[01]", "[01v2]", "(01)", "[EP01]", "[E01]" (VCB-Studio, Erai-raws, AniLibria)
+	for _, bm := range bracketEpRegex.FindAllStringSubmatch(base, -1) {
+		if len(bm) > 1 && bm[1] != "" {
+			if val, err := strconv.Atoi(bm[1]); err == nil && val > 0 {
+				if isResolutionOrYear(val) {
+					continue
+				}
 				return val
 			}
 		}
 	}
 
+	// 5. Поиск числа с конца строки в очищенном имени
 	words := spacesRegex.Split(baseClean, -1)
 	for i := len(words) - 1; i >= 0; i-- {
 		word := strings.Trim(words[i], "-_ \t.")
-		if val, err := strconv.Atoi(word); err == nil {
-			return val
+		if val, err := strconv.Atoi(word); err == nil && val > 0 {
+			if !isResolutionOrYear(val) {
+				return val
+			}
 		}
 	}
 
@@ -474,26 +503,29 @@ func extractSuffix(relPath, fileName string) string {
 		if isLangContainer {
 			if i+1 < len(parts)-1 {
 				nextPart := parts[i+1]
-				nextPartLower := strings.ToLower(nextPart)
+				nextClean := strings.Trim(nextPart, "[]()")
+				nextPartLower := strings.ToLower(nextClean)
 				isServiceFolder := nextPartLower == "signs" || nextPartLower == "надписи" ||
 					nextPartLower == "crunchyroll" || nextPartLower == "katsurasub" ||
 					nextPartLower == "full" || nextPartLower == "полные" ||
 					nextPartLower == "forced" || nextPartLower == "форсированные"
 
-				if !isServiceFolder {
-					suffixParts = append(suffixParts, nextPart)
+				if !isServiceFolder && strings.TrimSpace(nextClean) != "" {
+					suffixParts = append(suffixParts, nextClean)
 				}
 			}
 		}
 
 		// 3. Проверяем служебные папки (например, "Надписи" или "Signs")
-		isServiceFolder := lowerPart == "signs" || lowerPart == "надписи" ||
-			lowerPart == "crunchyroll" || lowerPart == "katsurasub" ||
-			lowerPart == "full" || lowerPart == "полные" ||
-			lowerPart == "forced" || lowerPart == "форсированные"
+		cleanPart := strings.Trim(part, "[]()")
+		cleanPartLower := strings.ToLower(cleanPart)
+		isServiceFolder := cleanPartLower == "signs" || cleanPartLower == "надписи" ||
+			cleanPartLower == "crunchyroll" || cleanPartLower == "katsurasub" ||
+			cleanPartLower == "full" || cleanPartLower == "полные" ||
+			cleanPartLower == "forced" || cleanPartLower == "форсированные"
 
-		if isServiceFolder {
-			suffixParts = append(suffixParts, part)
+		if isServiceFolder && strings.TrimSpace(cleanPart) != "" {
+			suffixParts = append(suffixParts, cleanPart)
 		}
 	}
 

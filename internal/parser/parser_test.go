@@ -83,6 +83,9 @@ func TestExtractEpisodeNumber(t *testing.T) {
 		{"Show Name EP12.mkv", 12},
 		{"Some_Anime_10_RUS.mka", 10},
 		{"Movie No Episode.mkv", -1},
+		{"[UHA-WINGS&VCB-Studio] EIGHTY SIX [01][Ma10p_1080p][x265_flac_aac].mkv", 1},
+		{"[UHA-WINGS&VCB-Studio] EIGHTY SIX [11][Ma10p_1080p][x265_flac_aac].mkv", 11},
+		{"[VCB-Studio] 86 EIGHTY-SIX [02v2][Ma10p_1080p].mkv", 2},
 	}
 
 	for _, tt := range tests {
