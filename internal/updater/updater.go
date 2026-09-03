@@ -37,6 +37,11 @@ func IsNewerVersion(latest, current string) bool {
 		return false
 	}
 
+	lowerC := strings.ToLower(cClean)
+	if lowerC == "main" || lowerC == "master" || lowerC == "dev" || lowerC == "latest" {
+		return false
+	}
+
 	lBase := strings.Split(lClean, "-")[0]
 	cBase := strings.Split(cClean, "-")[0]
 

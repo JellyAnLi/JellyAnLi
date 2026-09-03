@@ -3,18 +3,10 @@ name: Build and Publish Docker Image
 on:
   push:
     branches:
-      - main
-      - master
       - beta
-      - dev
     tags:
       - 'v*'
       - '*.*.*'
-  pull_request:
-    branches:
-      - main
-      - master
-      - beta
   workflow_dispatch:
     inputs:
       custom_tag:
@@ -59,10 +51,8 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            # Ветки
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+            # Ветка beta
             type=raw,value=beta,enable=${{ github.ref == 'refs/heads/beta' }}
-            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
             # Git теги: v0.2.1 -> 0.2.1 и latest; v0.2.1-beta -> 0.2.1-beta и beta
             type=match,pattern=v(.*),group=1,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=match,pattern=(.*),group=1,enable=${{ startsWith(github.ref, 'refs/tags/') && !startsWith(github.ref, 'refs/tags/v') }}
@@ -70,6 +60,22 @@ jobs:
             type=raw,value=beta,enable=${{ startsWith(github.ref, 'refs/tags/') && contains(github.ref, 'beta') }}
             # Ручной запуск через workflow_dispatch
             type=raw,value=${{ inputs.custom_tag }},enable=${{ inputs.custom_tag != '' }}
+
+      - name: Determine Version
+        id: get_version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/beta" ]]; then
+            CHANGELOG_VER=$(grep -E '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | head -n1 | sed -E 's/## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/v\1/' || true)
+            if [ -n "$CHANGELOG_VER" ]; then
+              echo "version=${CHANGELOG_VER}-beta" >> $GITHUB_OUTPUT
+            else
+              echo "version=beta" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -81,6 +87,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ steps.get_version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
