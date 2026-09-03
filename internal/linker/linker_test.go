@@ -1809,6 +1809,63 @@ func TestEightySixFullScanFromInputLog(t *testing.T) {
 	}
 }
 
+func TestMashleSeason2MetadataResolution(t *testing.T) {
+	// Устанавливаем кэш провайдера Shikimori
+	restore := providers.SetShikimoriCacheForTest(map[string]providers.CachedShikimoriInfo{
+		"MASHLE": {
+			Russian:   "Магия и мускулы",
+			Romaji:    "Mashle",
+			ShowRu:    "Магия и мускулы",
+			Season:    1,
+			IsMovie:   false,
+			IsSpecial: false,
+		},
+	})
+	defer restore()
+
+	rawFolder := "MASHLE Season 2 [2024][WEB-DL][1080p]"
+	files := []string{
+		"MASHLE Season 2 - 01 [WEB-DL 1080p 2024].mkv",
+		"RU Sound [AniBaza]/MASHLE Season 2 - 01 [WEB-DL 1080p 2024].ru_AniBaza.mka",
+	}
+
+	show := parser.ParseShowFolder(rawFolder, files, map[string]string{
+		"RU Sound": "ru",
+	})
+
+	cfg := &config.Config{
+		LibraryDir:          "/library",
+		TorrentDir:          "/torrents",
+		MetadataProviders:   []string{"shikimori"},
+		UseShikimori:        true,
+		UseRelativeSymlinks: true,
+	}
+
+	processShowMetadata(show, rawFolder, cfg)
+
+	if show.RussianName != "Магия и мускулы" {
+		t.Errorf("expected RussianName 'Магия и мускулы', got '%s'", show.RussianName)
+	}
+	if show.RomajiName != "Mashle" {
+		t.Errorf("expected RomajiName 'Mashle', got '%s'", show.RomajiName)
+	}
+	if show.Season != 2 {
+		t.Errorf("expected Season 2, got %d", show.Season)
+	}
+
+	plan := GeneratePlan([]*parser.AnimeShow{show}, cfg)
+
+	for _, op := range plan {
+		if !strings.Contains(op.TargetPath, "Магия и мускулы/Season 02") {
+			t.Errorf("expected TargetPath in 'Магия и мускулы/Season 02', got: %s", op.TargetPath)
+		}
+		if !strings.Contains(filepath.Base(op.TargetPath), "Mashle S02E01") {
+			t.Errorf("expected filename 'Mashle S02E01...', got: %s", filepath.Base(op.TargetPath))
+		}
+	}
+}
+
+
 
 
 

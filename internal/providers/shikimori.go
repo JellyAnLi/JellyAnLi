@@ -16,7 +16,7 @@ import (
 	"jelly-an-li/internal/parser"
 )
 
-const (
+var (
 	shikimoriHost      = "https://shikimori.one"
 	shikimoriUserAgent = "JellyAnLi/1.0 (Anime Media Linker for Jellyfin; +https://github.com/JellyAnLi/JellyAnLi)"
 )
@@ -311,8 +311,9 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 	isQuerySpecial := strings.Contains(strings.ToLower(query), "special") || strings.Contains(strings.ToLower(query), "спешл") || strings.Contains(strings.ToLower(query), "ova") || strings.Contains(strings.ToLower(query), "ова")
 	isQueryMovie := parser.IsMovieFolder(query) || parser.IsMovieFolder(cleanedQuery)
 
-	targetAnime := results[0]
-	bestScore := -999
+	var targetAnime ShikimoriAnime
+	bestScore := 0
+	foundMatch := false
 
 	for _, res := range results {
 		resName := strings.ToLower(res.Name)
@@ -344,21 +345,30 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 		candCompactRus := strings.ReplaceAll(normalizeTitleString(res.Russian), " ", "")
 
 		// 1. Точное совпадение названий или без пробелов (Mahoutei no Ken == Mahou Tei no Ken)
+		hasExactOrPrefix := false
 		if normQueryBase != "" && (candCleanBase == normQueryBase || candCleanRusBase == normQueryBase) {
 			score += 35
+			hasExactOrPrefix = true
 		} else if normQueryCompact != "" && (candCompactName == normQueryCompact || candCompactRus == normQueryCompact) {
 			score += 35
+			hasExactOrPrefix = true
 		} else if normQueryBase != "" && (strings.HasPrefix(candCleanBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanBase) || strings.HasPrefix(candCleanRusBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanRusBase)) {
 			score += 20
+			hasExactOrPrefix = true
 		} else if normQueryCompact != "" && (strings.HasPrefix(candCompactName, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactName) || strings.HasPrefix(candCompactRus, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactRus)) {
 			score += 20
+			hasExactOrPrefix = true
 		}
 
 		// 2. Проверка значимых слов
+		matchedWordCount := 0
+		firstWordMatched := false
 		for idx, w := range significantQueryWords {
 			if strings.Contains(resName, w) || strings.Contains(resRus, w) {
+				matchedWordCount++
 				score += 6
 				if idx == 0 {
+					firstWordMatched = true
 					score += 8 // Первое слово названия — самое важное
 				} else if idx == 1 {
 					score += 4
@@ -366,12 +376,21 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 			}
 		}
 
-		// Если первое значимое слово полностью отсутствует в названии кандидата — штрафуем
+		// Кандидат обязан иметь прямое отношение к названию тайтла
 		if len(significantQueryWords) > 0 {
-			firstWord := significantQueryWords[0]
-			if !strings.Contains(resName, firstWord) && !strings.Contains(resRus, firstWord) {
+			if !hasExactOrPrefix && matchedWordCount == 0 {
+				// Ни одного совпадения значимого слова — чужой тайтл
+				continue
+			}
+			if !hasExactOrPrefix && !firstWordMatched && matchedWordCount < 2 {
+				// Первое слово не совпало, и менее 2 слов совпало вообще
+				continue
+			}
+			if !firstWordMatched {
 				score -= 25
 			}
+		} else if !hasExactOrPrefix {
+			continue
 		}
 
 		// 3. Сезоны
@@ -409,7 +428,12 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 		if score > bestScore {
 			bestScore = score
 			targetAnime = res
+			foundMatch = true
 		}
+	}
+
+	if !foundMatch || bestScore <= 0 {
+		return nil, nil
 	}
 
 	russianName := targetAnime.Russian

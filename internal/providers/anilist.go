@@ -15,7 +15,7 @@ import (
 	"jelly-an-li/internal/parser"
 )
 
-const (
+var (
 	aniListEndpoint  = "https://graphql.anilist.co"
 	aniListUserAgent = "JellyAnLi/1.0 (Anime Media Linker for Jellyfin; +https://github.com/JellyAnLi/JellyAnLi)"
 )
@@ -292,8 +292,9 @@ query ($search: String) {
 	isQuerySpecial := strings.Contains(strings.ToLower(query), "special") || strings.Contains(strings.ToLower(query), "спешл") || strings.Contains(strings.ToLower(query), "ova") || strings.Contains(strings.ToLower(query), "ова")
 	isQueryMovie := parser.IsMovieFolder(query) || parser.IsMovieFolder(cleanedQuery)
 
-	targetMedia := results[0]
-	bestScore := -999
+	var targetMedia *AniListMedia
+	bestScore := 0
+	foundMatch := false
 
 	for _, media := range results {
 		var romaji, english string
@@ -327,21 +328,30 @@ query ($search: String) {
 		candCompactEn := strings.ReplaceAll(normalizeTitleString(english), " ", "")
 
 		// 1. Точное совпадение названий или без пробелов
+		hasExactOrPrefix := false
 		if normQueryBase != "" && (candCleanBase == normQueryBase || candCleanEnBase == normQueryBase) {
 			score += 35
+			hasExactOrPrefix = true
 		} else if normQueryCompact != "" && (candCompactRomaji == normQueryCompact || candCompactEn == normQueryCompact) {
 			score += 35
+			hasExactOrPrefix = true
 		} else if normQueryBase != "" && (strings.HasPrefix(candCleanBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanBase) || strings.HasPrefix(candCleanEnBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanEnBase)) {
 			score += 20
+			hasExactOrPrefix = true
 		} else if normQueryCompact != "" && (strings.HasPrefix(candCompactRomaji, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactRomaji) || strings.HasPrefix(candCompactEn, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactEn)) {
 			score += 20
+			hasExactOrPrefix = true
 		}
 
 		// 2. Проверка значимых слов
+		matchedWordCount := 0
+		firstWordMatched := false
 		for idx, w := range significantQueryWords {
 			if strings.Contains(strings.ToLower(romaji), w) || strings.Contains(strings.ToLower(english), w) {
+				matchedWordCount++
 				score += 6
 				if idx == 0 {
+					firstWordMatched = true
 					score += 8 // Первое слово названия — самое важное
 				} else if idx == 1 {
 					score += 4
@@ -349,12 +359,21 @@ query ($search: String) {
 			}
 		}
 
-		// Если первое значимое слово полностью отсутствует в названии кандидата — штрафуем
+		// Кандидат обязан иметь прямое отношение к названию тайтла
 		if len(significantQueryWords) > 0 {
-			firstWord := significantQueryWords[0]
-			if !strings.Contains(strings.ToLower(romaji), firstWord) && !strings.Contains(strings.ToLower(english), firstWord) {
+			if !hasExactOrPrefix && matchedWordCount == 0 {
+				// Ни одного совпадения значимого слова — чужой тайтл
+				continue
+			}
+			if !hasExactOrPrefix && !firstWordMatched && matchedWordCount < 2 {
+				// Первое слово не совпало, и менее 2 слов совпало вообще
+				continue
+			}
+			if !firstWordMatched {
 				score -= 25
 			}
+		} else if !hasExactOrPrefix {
+			continue
 		}
 
 		// 3. Сезоны
@@ -392,7 +411,12 @@ query ($search: String) {
 		if score > bestScore {
 			bestScore = score
 			targetMedia = media
+			foundMatch = true
 		}
+	}
+
+	if !foundMatch || bestScore <= 0 {
+		return nil, nil
 	}
 
 	var titleRomaji, titleEn string

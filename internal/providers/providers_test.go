@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -206,6 +208,67 @@ func TestClearAllCachesAndStats(t *testing.T) {
 	statsAfter := GetCacheStats()
 	if statsAfter.AniListCount != 0 || statsAfter.AniDBCount != 0 || statsAfter.ShikimoriCount != 0 {
 		t.Errorf("expected all cache counts to be 0 after ClearAllCaches, got %+v", statsAfter)
+	}
+}
+
+func TestShikimoriRejectsIrrelevantResults(t *testing.T) {
+	// Создаем тестовый сервер, имитирующий реальную ситуацию из output.log:
+	// На запрос "MASHLE 2" API Шикимори возвращает "Diamond no Ace" (Путь аса),
+	// а на запрос "MASHLE" возвращает "Mashle" (Магия и мускулы).
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		q := r.URL.Query().Get("search")
+		if r.URL.Path == "/api/animes" {
+			if q == "MASHLE 2" {
+				// Ложный результат из API
+				w.Write([]byte(`[{"id":64505,"name":"Diamond no Ace: Act II Second Season Part 2","russian":"Путь аса: Акт II 2. Часть 2","kind":"tv"}]`))
+				return
+			}
+			if q == "MASHLE" {
+				w.Write([]byte(`[{"id":52211,"name":"Mashle","russian":"Магия и мускулы","kind":"tv"}]`))
+				return
+			}
+		}
+		if r.URL.Path == "/api/animes/52211/franchise" {
+			w.Write([]byte(`{"links":[],"nodes":[{"id":52211,"name":"Магия и мускулы","kind":"tv"}]}`))
+			return
+		}
+		w.Write([]byte(`[]`))
+	}))
+	defer ts.Close()
+
+	oldHost := shikimoriHost
+	shikimoriHost = ts.URL
+	defer func() { shikimoriHost = oldHost }()
+
+	// Очищаем кэш перед тестом
+	ClearShikimoriCache()
+	defer ClearShikimoriCache()
+
+	prov := Get("shikimori")
+
+	// 1. Проверяем, что ложный результат (Diamond no Ace) для "MASHLE 2" отсеивается и возвращается nil!
+	metaIrrelevant, err := prov.Search("MASHLE 2", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if metaIrrelevant != nil {
+		t.Fatalf("expected nil for irrelevant query 'MASHLE 2', got %+v", metaIrrelevant)
+	}
+
+	// 2. Проверяем, что запрос "MASHLE" успешно находит "Магия и мускулы"
+	metaMashle, err := prov.Search("MASHLE", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if metaMashle == nil {
+		t.Fatalf("expected valid metadata for 'MASHLE'")
+	}
+	if metaMashle.ShowTitleRu != "Магия и мускулы" {
+		t.Errorf("expected ShowTitleRu 'Магия и мускулы', got '%s'", metaMashle.ShowTitleRu)
+	}
+	if metaMashle.TitleRomaji != "Mashle" {
+		t.Errorf("expected TitleRomaji 'Mashle', got '%s'", metaMashle.TitleRomaji)
 	}
 }
 
