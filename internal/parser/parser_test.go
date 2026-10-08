@@ -65,6 +65,11 @@ func TestExtractSeason(t *testing.T) {
 		{"86 - Eighty Six - Part 2 [BDRip 1080p]", 1},
 		{"Mushoku Tensei Season 2 Part 2", 2},
 		{"Noragami 2 [1080p]", 2},
+		{"Kusuriya no Hitorigoto 3 (WEBRip 1080p)", 3},
+		{"01. Kusuriya no Hitorigoto 3 (WEBRip 1080p).mkv", 3},
+		{"Kusuriya_no_Hitorigoto_3_(WEBRip_1080p)", 3},
+		{"Kusuriya no Hitorigoto 3.mkv", 3},
+		{"Kusuriya no Hitorigoto 3", 3},
 	}
 
 	for _, tt := range tests {
@@ -565,6 +570,37 @@ func TestFateZeroPartI(t *testing.T) {
 	}
 	if show.Files[1].SeasonNum != 1 || show.Files[1].EpisodeNum != 13 {
 		t.Errorf("file 1 expected S01E13, got S%02dE%02d", show.Files[1].SeasonNum, show.Files[1].EpisodeNum)
+	}
+}
+
+func TestKusuriyaNoHitorigotoSeason3(t *testing.T) {
+	folder := "Kusuriya no Hitorigoto 3 (WEBRip 1080p)"
+	files := []string{
+		"01. Kusuriya no Hitorigoto 3 (WEBRip 1080p).mkv",
+	}
+
+	cleaned := CleanShowName(folder)
+	if cleaned != "Kusuriya no Hitorigoto" {
+		t.Errorf("expected CleanShowName to return 'Kusuriya no Hitorigoto', got %q", cleaned)
+	}
+
+	season := ExtractSeason(folder)
+	if season != 3 {
+		t.Errorf("expected ExtractSeason to return 3, got %d", season)
+	}
+
+	show := ParseShowFolder(folder, files, nil)
+	if show.CleanedName != "Kusuriya no Hitorigoto" {
+		t.Errorf("expected show.CleanedName to be 'Kusuriya no Hitorigoto', got %q", show.CleanedName)
+	}
+	if show.Season != 3 {
+		t.Errorf("expected show.Season to be 3, got %d", show.Season)
+	}
+	if len(show.Files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(show.Files))
+	}
+	if show.Files[0].SeasonNum != 3 || show.Files[0].EpisodeNum != 1 {
+		t.Errorf("file 0 expected S03E01, got S%02dE%02d", show.Files[0].SeasonNum, show.Files[0].EpisodeNum)
 	}
 }
 

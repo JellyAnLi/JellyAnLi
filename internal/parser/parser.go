@@ -60,7 +60,7 @@ var (
 		regexp.MustCompile(`(?i)(\d{1,2})\s?(?:сезон|season|тв|tv)`),
 		regexp.MustCompile(`(?i)\bS(\d{1,2})E(\d{1,3})\b`),
 		regexp.MustCompile(`(?i)\b(?:tv)\s?[-_]?\s?(\d{1,2})\b`),
-		regexp.MustCompile(`(?i)\b([2-9])\b\s*(?:\(\d{4}\)|\(\s*(?:tv|тв)?\s*\d*\s*\)|\[|$)`),
+		regexp.MustCompile(`(?i)\b([2-9])\b\s*(?:\(|\[|\.[a-z0-9]+$|$)`),
 	}
 
 	// Регулярные выражения для извлечения части/куров (Part/Cour)
@@ -251,7 +251,7 @@ func HasExplicitSeason(s string) (int, bool) {
 	}
 
 	// Очищаем части/куры (Part 2, Часть 2), чтобы номер части не принимался за номер сезона
-	sClean := s
+	sClean := strings.ReplaceAll(s, "_", " ")
 	for _, re := range partRegexes {
 		sClean = re.ReplaceAllString(sClean, " ")
 	}
