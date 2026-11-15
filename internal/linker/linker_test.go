@@ -1865,6 +1865,98 @@ func TestMashleSeason2MetadataResolution(t *testing.T) {
 	}
 }
 
+func TestReZeroSeason2Part1AndPart2(t *testing.T) {
+	part1Folder := "Re.Zero - 2nd Season"
+	part1Files := []string{
+		"Re.Zero - 2nd Season/[Crunchyroll] Re.Zero - 2nd Season - 01 [1080p].mkv",
+		"Re.Zero - 2nd Season/[Crunchyroll] Re.Zero - 2nd Season - 02 [1080p].mkv",
+		"Re.Zero - 2nd Season/Rus Dub [AniLibria]/Re.Zero - 2nd Season - 01.mka",
+	}
+
+	part2Folder := "Re.Zero - 2nd Season Part 2"
+	part2Files := []string{
+		"Re.Zero - 2nd Season Part 2/[Crunchyroll] Re.Zero - 2nd Season Part 2 - 14 [1080p].mkv",
+		"Re.Zero - 2nd Season Part 2/[Crunchyroll] Re.Zero - 2nd Season Part 2 - 15 [1080p].mkv",
+	}
+
+	langMap := map[string]string{
+		"Rus Dub": "ru",
+	}
+
+	show1 := parser.ParseShowFolder(part1Folder, part1Files, langMap)
+	show2 := parser.ParseShowFolder(part2Folder, part2Files, langMap)
+
+	shows := []*parser.AnimeShow{show1, show2}
+
+	cfg := &config.Config{
+		LibraryDir:        "/library",
+		TorrentDir:        "/torrents",
+		FolderNamingMode:  "original",
+		MetadataProviders: []string{},
+	}
+
+	plan := GeneratePlan(shows, cfg)
+
+	expectedTargets := map[string]string{
+		part1Files[0]: "/library/Re Zero/Season 02/Re Zero S02E01.mkv",
+		part1Files[1]: "/library/Re Zero/Season 02/Re Zero S02E02.mkv",
+		part1Files[2]: "/library/Re Zero/Season 02/Re Zero S02E01.AniLibria.ru.mka",
+		part2Files[0]: "/library/Re Zero/Season 02/Re Zero S02E14.mkv",
+		part2Files[1]: "/library/Re Zero/Season 02/Re Zero S02E15.mkv",
+	}
+
+	for _, op := range plan {
+		expected, exists := expectedTargets[op.SourcePath]
+		if !exists {
+			t.Errorf("unexpected operation for source %s", op.SourcePath)
+			continue
+		}
+		if op.TargetPath != expected {
+			t.Errorf("source %s:\n  expected target: %s\n  got target:      %s", op.SourcePath, expected, op.TargetPath)
+		}
+	}
+}
+
+func TestMashleAnilibriaMkaNotHaoLie(t *testing.T) {
+	rawFolder := "MASHLE Season 2 [2024][WEB-DL][1080p]"
+	files := []string{
+		"MASHLE Season 2 [2024][WEB-DL][1080p]/MASHLE Season 2 - 01 [WEB-DL 1080p 2024].mkv",
+		"MASHLE Season 2 [2024][WEB-DL][1080p]/RU Sound [Anilibria]/MASHLE Season 2 - 01 [WEB-DL 1080p 2024].ru_Anilibria.mka",
+	}
+
+	show := parser.ParseShowFolder(rawFolder, files, map[string]string{
+		"RU Sound [Anilibria]": "ru",
+	})
+
+	if show.CleanedName != "MASHLE" {
+		t.Fatalf("expected CleanedName 'MASHLE', got '%s'", show.CleanedName)
+	}
+	if show.Season != 2 {
+		t.Fatalf("expected Season 2, got %d", show.Season)
+	}
+
+	cfg := &config.Config{
+		LibraryDir:          "/library",
+		TorrentDir:          "/torrents",
+		FolderNamingMode:    "russian",
+		MetadataProviders:   []string{},
+		UseRelativeSymlinks: true,
+	}
+
+	plan := GeneratePlan([]*parser.AnimeShow{show}, cfg)
+
+	for _, op := range plan {
+		if strings.Contains(op.TargetPath, "Hao") || strings.Contains(op.TargetPath, "Lie") {
+			t.Fatalf("CRITICAL BUG: TargetPath contains 'Hao×2+Lie×2': %s", op.TargetPath)
+		}
+		if !strings.Contains(op.TargetPath, "MASHLE/Season 02") {
+			t.Errorf("expected TargetPath in MASHLE/Season 02, got: %s", op.TargetPath)
+		}
+	}
+}
+
+
+
 
 
 

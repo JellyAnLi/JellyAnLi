@@ -352,10 +352,10 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 		} else if normQueryCompact != "" && (candCompactName == normQueryCompact || candCompactRus == normQueryCompact) {
 			score += 35
 			hasExactOrPrefix = true
-		} else if normQueryBase != "" && (strings.HasPrefix(candCleanBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanBase) || strings.HasPrefix(candCleanRusBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanRusBase)) {
+		} else if normQueryBase != "" && len(normQueryBase) >= 3 && (strings.HasPrefix(candCleanBase, normQueryBase) || (len(candCleanBase) >= 4 && strings.HasPrefix(normQueryBase, candCleanBase)) || strings.HasPrefix(candCleanRusBase, normQueryBase) || (len(candCleanRusBase) >= 4 && strings.HasPrefix(normQueryBase, candCleanRusBase))) {
 			score += 20
 			hasExactOrPrefix = true
-		} else if normQueryCompact != "" && (strings.HasPrefix(candCompactName, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactName) || strings.HasPrefix(candCompactRus, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactRus)) {
+		} else if normQueryCompact != "" && len(normQueryCompact) >= 3 && (strings.HasPrefix(candCompactName, normQueryCompact) || (len(candCompactName) >= 4 && strings.HasPrefix(normQueryCompact, candCompactName)) || strings.HasPrefix(candCompactRus, normQueryCompact) || (len(candCompactRus) >= 4 && strings.HasPrefix(normQueryCompact, candCompactRus))) {
 			score += 20
 			hasExactOrPrefix = true
 		}
@@ -378,7 +378,7 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 
 		// Кандидат обязан иметь прямое отношение к названию тайтла
 		if len(significantQueryWords) > 0 {
-			if !hasExactOrPrefix && matchedWordCount == 0 {
+			if matchedWordCount == 0 {
 				// Ни одного совпадения значимого слова — чужой тайтл
 				continue
 			}
@@ -419,9 +419,9 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 			}
 		} else {
 			if isCandTv {
-				score += 4
-			} else if isCandSpecial {
-				score -= 10
+				score += 15
+			} else if isCandSpecial || isCandOna {
+				score -= 25
 			}
 		}
 
@@ -518,7 +518,11 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 							if prequelCount > 0 {
 								seasonNum = prequelCount + 1
 								if rootNode, ok := nodesMap[rootID]; ok {
-									rootClean := cleanRussianSeason(rootNode.Name)
+									candidate := rootNode.Russian
+									if candidate == "" {
+										candidate = rootNode.Name
+									}
+									rootClean := cleanRussianSeason(candidate)
 									if rootClean != "" {
 										russianName = rootClean
 									}
@@ -538,7 +542,11 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 									if node, ok := nodesMap[parentID]; ok {
 										k := strings.ToLower(node.Kind)
 										if k == "tv" || strings.Contains(k, "tv") || strings.Contains(strings.ToLower(node.Kind), "сериал") || k == "ona" {
-											rootClean := cleanRussianSeason(node.Name)
+											candidate := node.Russian
+											if candidate == "" {
+												candidate = node.Name
+											}
+											rootClean := cleanRussianSeason(candidate)
 											if rootClean != "" {
 												russianName = rootClean
 											}

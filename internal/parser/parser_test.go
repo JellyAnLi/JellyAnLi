@@ -604,4 +604,41 @@ func TestKusuriyaNoHitorigotoSeason3(t *testing.T) {
 	}
 }
 
+func TestReZeroDebug(t *testing.T) {
+	folder1 := "[Beatrice-Raws] Re.Zero - 2nd Season [BDRip 1080p HEVC TrueHD]"
+	files1 := []string{
+		"[Beatrice-Raws] Re.Zero - 2nd Season - 01 [BDRip 1080p HEVC TrueHD].mkv",
+		"[Beatrice-Raws] Re.Zero - 2nd Season - 02 [BDRip 1080p HEVC TrueHD].mkv",
+		"[Beatrice-Raws] Re.Zero - 2nd Season - 03 [BDRip 1080p HEVC TrueHD].mkv",
+		"Sounds/AniLibria/[Beatrice-Raws] Re.Zero - 2nd Season - 01 [BDRip 1080p HEVC TrueHD].mka",
+	}
+
+	folder2 := "[Beatrice-Raws] Re.Zero - 2nd Season - Part 2 [BDRip 1080p x265 Dolby TrueHD]"
+	files2 := []string{
+		"[Beatrice-Raws] Re.Zero - 2nd Season - Part 2 - 14 [BDRip 1080p x265 Dolby TrueHD].mkv",
+		"[Beatrice-Raws] Re.Zero - 2nd Season - Part 2 - 15 [BDRip 1080p x265 Dolby TrueHD].mkv",
+		"Sounds/AniLibria/[Beatrice-Raws] Re.Zero - 2nd Season - Part 2 - 14 [BDRip 1080p x265 Dolby TrueHD].mka",
+	}
+
+	show1 := ParseShowFolder(folder1, files1, nil)
+	show2 := ParseShowFolder(folder2, files2, nil)
+
+	t.Logf("Show1 CleanedName: %q, Season: %d, Part: %d", show1.CleanedName, show1.Season, show1.Part)
+	for _, f := range show1.Files {
+		sClean := f.SourcePath
+		for idx, re := range seasonRegexes {
+			if m := re.FindStringSubmatch(sClean); len(m) > 1 {
+				t.Logf("File %s matched seasonRegex[%d] %s -> %s", filepath.Base(f.SourcePath), idx, re.String(), m[1])
+			}
+		}
+		t.Logf("Show1 file: %s -> Ep: %d, S: %d, P: %d, Suffix: %q, ExtrSeason: %d", f.SourcePath, f.EpisodeNum, f.SeasonNum, f.PartNum, f.Suffix, ExtractSeason(filepath.Base(f.SourcePath)))
+	}
+
+	t.Logf("Show2 CleanedName: %q, Season: %d, Part: %d", show2.CleanedName, show2.Season, show2.Part)
+	for _, f := range show2.Files {
+		t.Logf("Show2 file: %s -> Ep: %d, S: %d, P: %d, Suffix: %q", f.SourcePath, f.EpisodeNum, f.SeasonNum, f.PartNum, f.Suffix)
+	}
+}
+
+
 

@@ -169,18 +169,43 @@ func (p *AniListProvider) Search(query string, proxyURL string) (*AnimeMetadata,
 
 	aniListCacheLock.Lock()
 	if val, exists := cache.Entries[query]; exists && (val.Season > 0 || val.IsMovie || val.IsSpecial || val.TitleRomaji == "-") {
-		aniListCacheLock.Unlock()
 		if val.TitleRomaji == "-" {
+			aniListCacheLock.Unlock()
 			return nil, nil
 		}
-		return &AnimeMetadata{
-			Provider:    "anilist",
-			TitleRomaji: val.TitleRomaji,
-			TitleEn:     val.TitleEn,
-			Season:      val.Season,
-			IsMovie:     val.IsMovie,
-			IsSpecial:   val.IsSpecial,
-		}, nil
+
+		// Защита от устаревшего/ошибочного кэша от старых версий (например, Hao×2+Lie×2 для MASHLE)
+		qWords := strings.Fields(normalizeTitleString(parser.CleanShowName(query)))
+		validCache := true
+		if len(qWords) > 0 {
+			hasSig := false
+			matchFound := false
+			for _, w := range qWords {
+				if isStopWord(w) {
+					continue
+				}
+				hasSig = true
+				if strings.Contains(strings.ToLower(val.TitleRomaji), w) || strings.Contains(strings.ToLower(val.TitleEn), w) {
+					matchFound = true
+					break
+				}
+			}
+			if hasSig && !matchFound {
+				validCache = false
+			}
+		}
+
+		if validCache {
+			aniListCacheLock.Unlock()
+			return &AnimeMetadata{
+				Provider:    "anilist",
+				TitleRomaji: val.TitleRomaji,
+				TitleEn:     val.TitleEn,
+				Season:      val.Season,
+				IsMovie:     val.IsMovie,
+				IsSpecial:   val.IsSpecial,
+			}, nil
+		}
 	}
 	aniListCacheLock.Unlock()
 
@@ -335,10 +360,10 @@ query ($search: String) {
 		} else if normQueryCompact != "" && (candCompactRomaji == normQueryCompact || candCompactEn == normQueryCompact) {
 			score += 35
 			hasExactOrPrefix = true
-		} else if normQueryBase != "" && (strings.HasPrefix(candCleanBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanBase) || strings.HasPrefix(candCleanEnBase, normQueryBase) || strings.HasPrefix(normQueryBase, candCleanEnBase)) {
+		} else if normQueryBase != "" && len(normQueryBase) >= 3 && (strings.HasPrefix(candCleanBase, normQueryBase) || (len(candCleanBase) >= 4 && strings.HasPrefix(normQueryBase, candCleanBase)) || strings.HasPrefix(candCleanEnBase, normQueryBase) || (len(candCleanEnBase) >= 4 && strings.HasPrefix(normQueryBase, candCleanEnBase))) {
 			score += 20
 			hasExactOrPrefix = true
-		} else if normQueryCompact != "" && (strings.HasPrefix(candCompactRomaji, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactRomaji) || strings.HasPrefix(candCompactEn, normQueryCompact) || strings.HasPrefix(normQueryCompact, candCompactEn)) {
+		} else if normQueryCompact != "" && len(normQueryCompact) >= 3 && (strings.HasPrefix(candCompactRomaji, normQueryCompact) || (len(candCompactRomaji) >= 4 && strings.HasPrefix(normQueryCompact, candCompactRomaji)) || strings.HasPrefix(candCompactEn, normQueryCompact) || (len(candCompactEn) >= 4 && strings.HasPrefix(normQueryCompact, candCompactEn))) {
 			score += 20
 			hasExactOrPrefix = true
 		}
@@ -361,7 +386,7 @@ query ($search: String) {
 
 		// Кандидат обязан иметь прямое отношение к названию тайтла
 		if len(significantQueryWords) > 0 {
-			if !hasExactOrPrefix && matchedWordCount == 0 {
+			if matchedWordCount == 0 {
 				// Ни одного совпадения значимого слова — чужой тайтл
 				continue
 			}
@@ -402,9 +427,9 @@ query ($search: String) {
 			}
 		} else {
 			if isCandTv {
-				score += 4
+				score += 15
 			} else if isCandSpecial {
-				score -= 10
+				score -= 25
 			}
 		}
 

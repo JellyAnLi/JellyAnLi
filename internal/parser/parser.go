@@ -54,8 +54,9 @@ var (
 	// Регулярные выражения для извлечения сезона
 	seasonRegexes = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\bS(\d{1,2})\b`),
-		regexp.MustCompile(`(?i)\b(?:season|сезон)\b\s?[-_]?\s?(\d{1,2})\b`),
 		regexp.MustCompile(`(?i)\b(\d{1,2})(?:st|nd|rd|th)\b\s*(?:season|сезон)?`),
+		regexp.MustCompile(`(?i)\b(?:season|сезон)\s+(\d{1,2})\b`),
+		regexp.MustCompile(`(?i)\b(?:season|сезон)[_-](\d{1,2})\b`),
 		regexp.MustCompile(`(?i)(?:сезон|тв)\s?[-_]?\s?(\d{1,2})`),
 		regexp.MustCompile(`(?i)(\d{1,2})\s?(?:сезон|season|тв|tv)`),
 		regexp.MustCompile(`(?i)\bS(\d{1,2})E(\d{1,3})\b`),
@@ -418,15 +419,23 @@ func ParseEpisodeFile(relPath string, defaultSeason int, defaultPart int, langua
 	epNum := ExtractEpisodeNumber(fileName)
 
 	fileSeason := defaultSeason
-	if s := ExtractSeason(fileName); s != 1 {
-		fileSeason = s
-	} else {
-		normalizedPath := filepath.ToSlash(relPath)
-		parts := strings.Split(normalizedPath, "/")
-		for i := len(parts) - 2; i >= 0; i-- {
-			if s := ExtractSeason(parts[i]); s != 1 {
-				fileSeason = s
-				break
+	if sm := sxxEyyRegex.FindStringSubmatch(fileName); len(sm) > 1 {
+		if sMatch := regexp.MustCompile(`(?i)\bS(\d{1,2})`).FindStringSubmatch(fileName); len(sMatch) > 1 {
+			if sVal, err := strconv.Atoi(sMatch[1]); err == nil && sVal > 0 {
+				fileSeason = sVal
+			}
+		}
+	} else if defaultSeason <= 1 {
+		if s := ExtractSeason(fileName); s != 1 {
+			fileSeason = s
+		} else {
+			normalizedPath := filepath.ToSlash(relPath)
+			parts := strings.Split(normalizedPath, "/")
+			for i := len(parts) - 2; i >= 0; i-- {
+				if s := ExtractSeason(parts[i]); s != 1 {
+					fileSeason = s
+					break
+				}
 			}
 		}
 	}
@@ -472,6 +481,26 @@ func ParseEpisodeFile(relPath string, defaultSeason int, defaultPart int, langua
 	}
 }
 
+func isLikelySuffix(s string) bool {
+	sClean := strings.TrimSpace(s)
+	sLower := strings.ToLower(sClean)
+	if sLower == "" || len(sClean) > 25 {
+		return false
+	}
+	if strings.Contains(sLower, "season") || strings.Contains(sLower, "сезон") ||
+		strings.Contains(sLower, "part") || strings.Contains(sLower, "часть") ||
+		strings.Contains(sLower, "cour") || strings.Contains(sLower, " - ") ||
+		strings.Contains(sLower, "bdrip") || strings.Contains(sLower, "web-dl") ||
+		strings.Contains(sLower, "webrip") || strings.Contains(sLower, "1080p") ||
+		strings.Contains(sLower, "720p") || strings.Contains(sLower, "truehd") ||
+		strings.Contains(sLower, "flac") || strings.Contains(sLower, "hevc") ||
+		strings.Contains(sLower, "x264") || strings.Contains(sLower, "x265") ||
+		strings.Contains(sLower, "beatrice") || strings.Contains(sLower, "sofcj") {
+		return false
+	}
+	return true
+}
+
 // extractSuffix извлекает суффикс на основе имени файла и его пути
 func extractSuffix(relPath, fileName string) string {
 	base := strings.TrimSuffix(fileName, filepath.Ext(fileName))
@@ -492,8 +521,9 @@ func extractSuffix(relPath, fileName string) string {
 		matches := bracketsContentRegex.FindStringSubmatch(part)
 		if len(matches) > 0 {
 			for _, m := range matches[1:] {
-				if m != "" {
-					suffixParts = append(suffixParts, strings.TrimSpace(m))
+				cleanM := strings.TrimSpace(m)
+				if isLikelySuffix(cleanM) {
+					suffixParts = append(suffixParts, cleanM)
 					break
 				}
 			}
@@ -507,29 +537,30 @@ func extractSuffix(relPath, fileName string) string {
 			normPart == "engdub" || normPart == "engsub" ||
 			normPart == "sound" || normPart == "subs" ||
 			normPart == "dub" || normPart == "sub" ||
-			normPart == "audio" || normPart == "subtitles"
+			normPart == "audio" || normPart == "subtitles" ||
+			normPart == "sounds"
 
 		if isLangContainer {
 			if i+1 < len(parts)-1 {
 				nextPart := parts[i+1]
-				nextClean := strings.Trim(nextPart, "[]()")
+				nextClean := strings.TrimSpace(bracketsRegex.ReplaceAllString(nextPart, ""))
+				nextClean = strings.Trim(nextClean, "[]()- ")
 				nextPartLower := strings.ToLower(nextClean)
 				isServiceFolder := nextPartLower == "signs" || nextPartLower == "надписи" ||
-					nextPartLower == "crunchyroll" || nextPartLower == "katsurasub" ||
 					nextPartLower == "full" || nextPartLower == "полные" ||
 					nextPartLower == "forced" || nextPartLower == "форсированные"
 
-				if !isServiceFolder && strings.TrimSpace(nextClean) != "" {
+				if !isServiceFolder && isLikelySuffix(nextClean) {
 					suffixParts = append(suffixParts, nextClean)
 				}
 			}
 		}
 
 		// 3. Проверяем служебные папки (например, "Надписи" или "Signs")
-		cleanPart := strings.Trim(part, "[]()")
+		cleanPart := strings.TrimSpace(bracketsRegex.ReplaceAllString(part, ""))
+		cleanPart = strings.Trim(cleanPart, "[]()- ")
 		cleanPartLower := strings.ToLower(cleanPart)
 		isServiceFolder := cleanPartLower == "signs" || cleanPartLower == "надписи" ||
-			cleanPartLower == "crunchyroll" || cleanPartLower == "katsurasub" ||
 			cleanPartLower == "full" || cleanPartLower == "полные" ||
 			cleanPartLower == "forced" || cleanPartLower == "форсированные"
 
@@ -545,10 +576,10 @@ func extractSuffix(relPath, fileName string) string {
 	if len(fileParts) > 1 {
 		for i := 1; i < len(fileParts); i++ {
 			part := strings.TrimSpace(fileParts[i])
-			if part != "" {
+			if isLikelySuffix(part) {
 				cleanedPart := langSuffixRegex.ReplaceAllString(part, "")
 				cleanedPart = strings.Trim(cleanedPart, "-_ ")
-				if cleanedPart != "" {
+				if isLikelySuffix(cleanedPart) {
 					suffixParts = append(suffixParts, cleanedPart)
 				} else if langSuffixRegex.MatchString(part) {
 					lower := strings.ToLower(part)
@@ -674,14 +705,25 @@ func AlignEpisodeNumbers(show *AnimeShow) {
 		// Сценарий А: Сквозная нумерация ВСЕХ файлов в сезоне S > 1.
 		// Например: видео 13..25 и сабы 13..25 во 2-м сезоне.
 		// Если минимальный эпизод видео больше 1, значит весь сезон сдвинут!
+		// Внимание: если раздача явно разделена на части (Part 2, Part 3 и т.д.),
+		// серии 14..25 являются продолжением первой части и сдвигать их назад НЕЛЬЗЯ!
 		if season > 1 && minVideoEp > 1 && minVideoEp != 9999 {
-			offset := minVideoEp - 1
+			hasParts := false
 			for _, f := range seasonFiles {
-				if f.EpisodeNum != -1 {
-					f.EpisodeNum = f.EpisodeNum - offset
+				if f.PartNum > 1 {
+					hasParts = true
+					break
 				}
 			}
-			continue // Выравнивание завершено для этого сезона
+			if !hasParts {
+				offset := minVideoEp - 1
+				for _, f := range seasonFiles {
+					if f.EpisodeNum != -1 {
+						f.EpisodeNum = f.EpisodeNum - offset
+					}
+				}
+				continue // Выравнивание завершено для этого сезона
+			}
 		}
 
 		// Сценарий Б: Сквозная нумерация только аудио/сабов (видео 1..13, а сабы 13..25).

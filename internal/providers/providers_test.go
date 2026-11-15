@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -271,6 +272,95 @@ func TestShikimoriRejectsIrrelevantResults(t *testing.T) {
 		t.Errorf("expected TitleRomaji 'Mashle', got '%s'", metaMashle.TitleRomaji)
 	}
 }
+
+func TestAniListRejectsHaoLieForMashle(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var reqBody struct {
+			Variables struct {
+				Search string `json:"search"`
+			} `json:"variables"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+
+		if reqBody.Variables.Search == "MASHLE 2" {
+			// Симулируем выдачу AniList с левым тайтлом Hao×2+Lie×2
+			resp := `{
+				"data": {
+					"Page": {
+						"media": [
+							{
+								"id": 99999,
+								"title": {
+									"romaji": "Hao×2+Lie×2",
+									"english": "Hao×2+Lie×2"
+								},
+								"format": "TV"
+							}
+						]
+					}
+				}
+			}`
+			w.Write([]byte(resp))
+			return
+		}
+
+		if reqBody.Variables.Search == "MASHLE" {
+			resp := `{
+				"data": {
+					"Page": {
+						"media": [
+							{
+								"id": 151801,
+								"title": {
+									"romaji": "MASHLE",
+									"english": "MASHLE: MAGIC AND MUSCLES"
+								},
+								"format": "TV"
+							}
+						]
+					}
+				}
+			}`
+			w.Write([]byte(resp))
+			return
+		}
+
+		w.Write([]byte(`{"data":{"Page":{"media":[]}}}`))
+	}))
+	defer ts.Close()
+
+	oldEndpoint := aniListEndpoint
+	aniListEndpoint = ts.URL
+	defer func() { aniListEndpoint = oldEndpoint }()
+
+	ClearAniListCache()
+	defer ClearAniListCache()
+
+	prov := Get("anilist")
+
+	// 1. Проверяем, что ложный результат "Hao×2+Lie×2" для "MASHLE 2" безусловно отсекается (nil)
+	metaIrrelevant, err := prov.Search("MASHLE 2", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if metaIrrelevant != nil {
+		t.Fatalf("expected nil for irrelevant query 'MASHLE 2', got %+v", metaIrrelevant)
+	}
+
+	// 2. Проверяем, что fallback на "MASHLE" успешно находит настоящий MASHLE
+	metaMashle, err := prov.Search("MASHLE", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if metaMashle == nil {
+		t.Fatalf("expected valid metadata for 'MASHLE'")
+	}
+	if metaMashle.TitleRomaji != "MASHLE" {
+		t.Errorf("expected TitleRomaji 'MASHLE', got '%s'", metaMashle.TitleRomaji)
+	}
+}
+
 
 
 
