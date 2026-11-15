@@ -349,21 +349,26 @@ query ($search: String) {
 
 		candCleanBase := normalizeTitleString(parser.CleanShowName(romaji))
 		candCleanEnBase := normalizeTitleString(parser.CleanShowName(english))
+		candCleanCompactRomaji := strings.ReplaceAll(candCleanBase, " ", "")
+		candCleanCompactEn := strings.ReplaceAll(candCleanEnBase, " ", "")
 		candCompactRomaji := strings.ReplaceAll(normalizeTitleString(romaji), " ", "")
 		candCompactEn := strings.ReplaceAll(normalizeTitleString(english), " ", "")
 
 		// 1. Точное совпадение названий или без пробелов
 		hasExactOrPrefix := false
+		isExactBaseMatch := false
 		if normQueryBase != "" && (candCleanBase == normQueryBase || candCleanEnBase == normQueryBase) {
-			score += 35
+			score += 40
 			hasExactOrPrefix = true
-		} else if normQueryCompact != "" && (candCompactRomaji == normQueryCompact || candCompactEn == normQueryCompact) {
-			score += 35
+			isExactBaseMatch = true
+		} else if normQueryCompact != "" && (candCleanCompactRomaji == normQueryCompact || candCleanCompactEn == normQueryCompact || candCompactRomaji == normQueryCompact || candCompactEn == normQueryCompact) {
+			score += 40
 			hasExactOrPrefix = true
+			isExactBaseMatch = true
 		} else if normQueryBase != "" && len(normQueryBase) >= 3 && (strings.HasPrefix(candCleanBase, normQueryBase) || (len(candCleanBase) >= 4 && strings.HasPrefix(normQueryBase, candCleanBase)) || strings.HasPrefix(candCleanEnBase, normQueryBase) || (len(candCleanEnBase) >= 4 && strings.HasPrefix(normQueryBase, candCleanEnBase))) {
 			score += 20
 			hasExactOrPrefix = true
-		} else if normQueryCompact != "" && len(normQueryCompact) >= 3 && (strings.HasPrefix(candCompactRomaji, normQueryCompact) || (len(candCompactRomaji) >= 4 && strings.HasPrefix(normQueryCompact, candCompactRomaji)) || strings.HasPrefix(candCompactEn, normQueryCompact) || (len(candCompactEn) >= 4 && strings.HasPrefix(normQueryCompact, candCompactEn))) {
+		} else if normQueryCompact != "" && len(normQueryCompact) >= 3 && (strings.HasPrefix(candCleanCompactRomaji, normQueryCompact) || (len(candCleanCompactRomaji) >= 4 && strings.HasPrefix(normQueryCompact, candCleanCompactRomaji)) || strings.HasPrefix(candCleanCompactEn, normQueryCompact) || (len(candCleanCompactEn) >= 4 && strings.HasPrefix(normQueryCompact, candCleanCompactEn))) {
 			score += 20
 			hasExactOrPrefix = true
 		}
@@ -371,22 +376,28 @@ query ($search: String) {
 		// 2. Проверка значимых слов
 		matchedWordCount := 0
 		firstWordMatched := false
-		for idx, w := range significantQueryWords {
-			if containsMatchWord(romaji, w) || containsMatchWord(english, w) {
-				matchedWordCount++
-				score += 6
-				if idx == 0 {
-					firstWordMatched = true
-					score += 8 // Первое слово названия — самое важное
-				} else if idx == 1 {
-					score += 4
+		if isExactBaseMatch {
+			matchedWordCount = len(significantQueryWords)
+			firstWordMatched = true
+			score += 15
+		} else {
+			for idx, w := range significantQueryWords {
+				if containsMatchWord(romaji, w) || containsMatchWord(english, w) {
+					matchedWordCount++
+					score += 6
+					if idx == 0 {
+						firstWordMatched = true
+						score += 8 // Первое слово названия — самое важное
+					} else if idx == 1 {
+						score += 4
+					}
 				}
 			}
 		}
 
 		// Кандидат обязан иметь прямое отношение к названию тайтла
 		if len(significantQueryWords) > 0 {
-			if matchedWordCount == 0 {
+			if !isExactBaseMatch && matchedWordCount == 0 {
 				// Ни одного совпадения значимого слова — чужой тайтл
 				continue
 			}

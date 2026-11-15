@@ -341,21 +341,26 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 
 		candCleanBase := normalizeTitleString(parser.CleanShowName(res.Name))
 		candCleanRusBase := normalizeTitleString(cleanRussianSeason(res.Russian))
+		candCleanCompact := strings.ReplaceAll(candCleanBase, " ", "")
+		candCleanRusCompact := strings.ReplaceAll(candCleanRusBase, " ", "")
 		candCompactName := strings.ReplaceAll(normalizeTitleString(res.Name), " ", "")
 		candCompactRus := strings.ReplaceAll(normalizeTitleString(res.Russian), " ", "")
 
-		// 1. Точное совпадение названий или без пробелов (Mahoutei no Ken == Mahou Tei no Ken)
+		// 1. Точное совпадение названий или без пробелов (Mahoutei no Ken == Mahou Tei no Ken, Dan Da Dan == Dandadan)
 		hasExactOrPrefix := false
+		isExactBaseMatch := false
 		if normQueryBase != "" && (candCleanBase == normQueryBase || candCleanRusBase == normQueryBase) {
-			score += 35
+			score += 40
 			hasExactOrPrefix = true
-		} else if normQueryCompact != "" && (candCompactName == normQueryCompact || candCompactRus == normQueryCompact) {
-			score += 35
+			isExactBaseMatch = true
+		} else if normQueryCompact != "" && (candCleanCompact == normQueryCompact || candCleanRusCompact == normQueryCompact || candCompactName == normQueryCompact || candCompactRus == normQueryCompact) {
+			score += 40
 			hasExactOrPrefix = true
+			isExactBaseMatch = true
 		} else if normQueryBase != "" && len(normQueryBase) >= 3 && (strings.HasPrefix(candCleanBase, normQueryBase) || (len(candCleanBase) >= 4 && strings.HasPrefix(normQueryBase, candCleanBase)) || strings.HasPrefix(candCleanRusBase, normQueryBase) || (len(candCleanRusBase) >= 4 && strings.HasPrefix(normQueryBase, candCleanRusBase))) {
 			score += 20
 			hasExactOrPrefix = true
-		} else if normQueryCompact != "" && len(normQueryCompact) >= 3 && (strings.HasPrefix(candCompactName, normQueryCompact) || (len(candCompactName) >= 4 && strings.HasPrefix(normQueryCompact, candCompactName)) || strings.HasPrefix(candCompactRus, normQueryCompact) || (len(candCompactRus) >= 4 && strings.HasPrefix(normQueryCompact, candCompactRus))) {
+		} else if normQueryCompact != "" && len(normQueryCompact) >= 3 && (strings.HasPrefix(candCleanCompact, normQueryCompact) || (len(candCleanCompact) >= 4 && strings.HasPrefix(normQueryCompact, candCleanCompact)) || strings.HasPrefix(candCleanRusCompact, normQueryCompact) || (len(candCleanRusCompact) >= 4 && strings.HasPrefix(normQueryCompact, candCleanRusCompact))) {
 			score += 20
 			hasExactOrPrefix = true
 		}
@@ -363,22 +368,28 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 		// 2. Проверка значимых слов
 		matchedWordCount := 0
 		firstWordMatched := false
-		for idx, w := range significantQueryWords {
-			if containsMatchWord(resName, w) || containsMatchWord(resRus, w) {
-				matchedWordCount++
-				score += 6
-				if idx == 0 {
-					firstWordMatched = true
-					score += 8 // Первое слово названия — самое важное
-				} else if idx == 1 {
-					score += 4
+		if isExactBaseMatch {
+			matchedWordCount = len(significantQueryWords)
+			firstWordMatched = true
+			score += 15
+		} else {
+			for idx, w := range significantQueryWords {
+				if containsMatchWord(resName, w) || containsMatchWord(resRus, w) {
+					matchedWordCount++
+					score += 6
+					if idx == 0 {
+						firstWordMatched = true
+						score += 8 // Первое слово названия — самое важное
+					} else if idx == 1 {
+						score += 4
+					}
 				}
 			}
 		}
 
 		// Кандидат обязан иметь прямое отношение к названию тайтла
 		if len(significantQueryWords) > 0 {
-			if matchedWordCount == 0 {
+			if !isExactBaseMatch && matchedWordCount == 0 {
 				// Ни одного совпадения значимого слова — чужой тайтл
 				continue
 			}

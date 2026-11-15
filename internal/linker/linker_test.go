@@ -2007,6 +2007,60 @@ func TestReZeroBeatriceRawsScanAndPlan(t *testing.T) {
 	}
 }
 
+func TestDanDaDanSeason1And2(t *testing.T) {
+	folder1 := "[ReinForce] Dan Da Dan (S01) (2024) [BDRip 1080p x264 FLAC]"
+	files1 := []string{
+		"[ReinForce] Dan Da Dan (S01) (2024) [BDRip 1080p x264 FLAC]/[ReinForce] Dan Da Dan (S01) (2024) - 01 [BDRip 1080p x264 FLAC].mkv",
+	}
+
+	folder2 := "[ReinForce] Dan Da Dan (S02) (2025) [BDRip 1080p x264 FLAC]"
+	files2 := []string{
+		"[ReinForce] Dan Da Dan (S02) (2025) [BDRip 1080p x264 FLAC]/[ReinForce] Dan Da Dan (S02) (2025) - 01 [BDRip 1080p x264 FLAC].mkv",
+	}
+
+	show1 := parser.ParseShowFolder(folder1, files1, nil)
+	show2 := parser.ParseShowFolder(folder2, files2, nil)
+
+	cfg := &config.Config{
+		LibraryDir:          "/library",
+		TorrentDir:          "/torrents",
+		FolderNamingMode:    "russian",
+		MetadataProviders:   []string{"shikimori", "anilist"},
+		UseShikimori:        true,
+		UseRelativeSymlinks: true,
+	}
+
+	providers.ClearAllCaches()
+	processShowMetadata(show1, folder1, cfg)
+	processShowMetadata(show2, folder2, cfg)
+
+	t.Logf("Show1: Russian: %q, Romaji: %q, Season: %d", show1.RussianName, show1.RomajiName, show1.Season)
+	t.Logf("Show2: Russian: %q, Romaji: %q, Season: %d", show2.RussianName, show2.RomajiName, show2.Season)
+
+	if strings.Contains(show1.RomajiName, "Zong Dong Yuan") || strings.Contains(show1.RussianName, "Zong Dong Yuan") {
+		t.Fatalf("Show1 matched wrong Chinese title 'Dan Dan Zong Dong Yuan'!")
+	}
+	if strings.Contains(show2.RomajiName, "Jian Wang") || strings.Contains(show2.RussianName, "Jian Wang") {
+		t.Fatalf("Show2 matched wrong title 'Jian Wang 3'!")
+	}
+
+	if show1.RussianName != "Дандадан" {
+		t.Errorf("expected Show1 RussianName 'Дандадан', got %q", show1.RussianName)
+	}
+	if show2.RussianName != "Дандадан" {
+		t.Errorf("expected Show2 RussianName 'Дандадан', got %q", show2.RussianName)
+	}
+
+	plan := GeneratePlan([]*parser.AnimeShow{show1, show2}, cfg)
+	for _, op := range plan {
+		t.Logf("OP: %s -> %s", op.SourcePath, op.TargetPath)
+		if strings.Contains(op.TargetPath, "Zong") || strings.Contains(op.TargetPath, "Jian") {
+			t.Fatalf("Operation has wrong target: %s", op.TargetPath)
+		}
+	}
+}
+
+
 
 
 
