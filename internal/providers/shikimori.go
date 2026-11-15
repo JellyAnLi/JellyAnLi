@@ -246,7 +246,7 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 
 	waitShikimoriRateLimit()
 
-	apiUrl := fmt.Sprintf("%s/api/animes?search=%s&limit=5", shikimoriHost, url.QueryEscape(cleanedQuery))
+	apiUrl := fmt.Sprintf("%s/api/animes?search=%s&limit=15", shikimoriHost, url.QueryEscape(cleanedQuery))
 	client := GetHTTPClient(proxyURL)
 
 	var resp *http.Response
@@ -321,9 +321,9 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 		resKind := strings.ToLower(res.Kind)
 
 		isCandMovie := resKind == "movie" || strings.Contains(resKind, "фильм")
-		isCandSpecial := resKind == "special" || resKind == "ova" || strings.Contains(resKind, "спец")
+		isCandSpecial := resKind == "special" || resKind == "tv_special" || resKind == "ova" || resKind == "ona" || resKind == "pv" || resKind == "cm" || strings.Contains(resKind, "спец")
 		isCandOna := resKind == "ona"
-		isCandTv := resKind == "tv" || strings.Contains(resKind, "tv") || strings.Contains(resKind, "сериал")
+		isCandTv := (resKind == "tv" || resKind == "tv_short" || strings.Contains(resKind, "сериал")) && resKind != "tv_special"
 
 		candSeasonName, hasCandSeasonName := parser.HasExplicitSeason(res.Name)
 		candSeasonRus, hasCandSeasonRus := parser.HasExplicitSeason(res.Russian)
@@ -364,7 +364,7 @@ func (p *ShikimoriProvider) Search(query string, proxyURL string) (*AnimeMetadat
 		matchedWordCount := 0
 		firstWordMatched := false
 		for idx, w := range significantQueryWords {
-			if strings.Contains(resName, w) || strings.Contains(resRus, w) {
+			if containsMatchWord(resName, w) || containsMatchWord(resRus, w) {
 				matchedWordCount++
 				score += 6
 				if idx == 0 {

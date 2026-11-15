@@ -218,7 +218,7 @@ func (p *AniListProvider) Search(query string, proxyURL string) (*AnimeMetadata,
 
 	graphqlQuery := `
 query ($search: String) {
-  Page(page: 1, perPage: 5) {
+  Page(page: 1, perPage: 10) {
     media(search: $search, type: ANIME) {
       id
       title {
@@ -372,7 +372,7 @@ query ($search: String) {
 		matchedWordCount := 0
 		firstWordMatched := false
 		for idx, w := range significantQueryWords {
-			if strings.Contains(strings.ToLower(romaji), w) || strings.Contains(strings.ToLower(english), w) {
+			if containsMatchWord(romaji, w) || containsMatchWord(english, w) {
 				matchedWordCount++
 				score += 6
 				if idx == 0 {

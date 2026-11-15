@@ -1955,6 +1955,59 @@ func TestMashleAnilibriaMkaNotHaoLie(t *testing.T) {
 	}
 }
 
+func TestReZeroBeatriceRawsScanAndPlan(t *testing.T) {
+	folder1 := "[Beatrice-Raws] Re.Zero - 2nd Season [BDRip 1080p HEVC TrueHD]"
+	files1 := []string{
+		"[Beatrice-Raws] Re.Zero - 2nd Season - 01 [BDRip 1080p HEVC TrueHD].mkv",
+		"[Beatrice-Raws] Re.Zero - 2nd Season - 02 [BDRip 1080p HEVC TrueHD].mkv",
+		"Sounds/AniLibria/[Beatrice-Raws] Re.Zero - 2nd Season - 01 [BDRip 1080p HEVC TrueHD].mka",
+	}
+
+	folder2 := "[Beatrice-Raws] Re.Zero - 2nd Season - Part 2 [BDRip 1080p x265 Dolby TrueHD]"
+	files2 := []string{
+		"[Beatrice-Raws] Re.Zero - 2nd Season - Part 2 - 14 [BDRip 1080p x265 Dolby TrueHD].mkv",
+		"[Beatrice-Raws] Re.Zero - 2nd Season - Part 2 - 15 [BDRip 1080p x265 Dolby TrueHD].mkv",
+		"Sounds/AniLibria/[Beatrice-Raws] Re.Zero - 2nd Season - Part 2 - 14 [BDRip 1080p x265 Dolby TrueHD].mka",
+	}
+
+	show1 := parser.ParseShowFolder(folder1, files1, map[string]string{
+		"AniLibria": "ru",
+	})
+	show2 := parser.ParseShowFolder(folder2, files2, map[string]string{
+		"AniLibria": "ru",
+	})
+
+	t.Logf("Show1 CleanedName: %q, Season: %d, Part: %d, Files count: %d", show1.CleanedName, show1.Season, show1.Part, len(show1.Files))
+	t.Logf("Show2 CleanedName: %q, Season: %d, Part: %d, Files count: %d", show2.CleanedName, show2.Season, show2.Part, len(show2.Files))
+
+	cfg := &config.Config{
+		LibraryDir:          "/library",
+		TorrentDir:          "/torrents",
+		FolderNamingMode:    "russian",
+		MetadataProviders:   []string{"shikimori", "anilist"},
+		UseShikimori:        true,
+		UseRelativeSymlinks: true,
+	}
+
+	providers.ClearAllCaches()
+	processShowMetadata(show1, folder1, cfg)
+	processShowMetadata(show2, folder2, cfg)
+
+	t.Logf("After metadata Show1: RussianName: %q, Romaji: %q, Season: %d, ShikimoriID: %d, AniListID: %d", show1.RussianName, show1.RomajiName, show1.Season, show1.ShikimoriID, show1.AniListID)
+	t.Logf("After metadata Show2: RussianName: %q, Romaji: %q, Season: %d, ShikimoriID: %d, AniListID: %d", show2.RussianName, show2.RomajiName, show2.Season, show2.ShikimoriID, show2.AniListID)
+
+	plan := GeneratePlan([]*parser.AnimeShow{show1, show2}, cfg)
+	t.Logf("Total operations generated: %d", len(plan))
+	for _, op := range plan {
+		t.Logf("OP: %s -> %s", op.SourcePath, op.TargetPath)
+	}
+
+	if len(plan) == 0 {
+		t.Fatalf("Plan is empty! Why?")
+	}
+}
+
+
 
 
 

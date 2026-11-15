@@ -99,3 +99,16 @@ func GetCacheStats() ProviderCacheStats {
 		TotalCount:     shiki + anilist + anidb,
 	}
 }
+
+// containsMatchWord проверяет наличие слова с точным совпадением для коротких слов
+func containsMatchWord(text, word string) bool {
+	if len(word) <= 3 {
+		for _, token := range strings.Fields(normalizeTitleString(text)) {
+			if token == word {
+				return true
+			}
+		}
+		return false
+	}
+	return strings.Contains(strings.ToLower(text), strings.ToLower(word))
+}
