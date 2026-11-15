@@ -319,14 +319,6 @@ func resolveShowFolderName(show *parser.AnimeShow, allShows []*parser.AnimeShow,
 				}
 			}
 		}
-
-		// Если файлы раздачи уже слинкованы в существующую папку в libraryDir, сохраняем её при сетевых сбоях/отсутствии кириллицы
-		if existingFolder := findExistingFolderByFile(libraryDir, show); existingFolder != "" {
-			isRussianMode := strings.ToLower(mode) == "russian" || strings.ToLower(mode) == "ru" || mode == ""
-			if (isRussianMode && !containsCyrillic(bestMatch) && containsCyrillic(existingFolder)) || show.RussianName == "" {
-				bestMatch = existingFolder
-			}
-		}
 	}
 
 	if bestMatch != showName {
@@ -334,79 +326,6 @@ func resolveShowFolderName(show *parser.AnimeShow, allShows []*parser.AnimeShow,
 	}
 
 	return sanitizeFileName(bestMatch)
-}
-
-// findExistingFolderByFile проверяет, привязаны ли уже файлы шоу к какой-либо папке в libraryDir
-func findExistingFolderByFile(libraryDir string, show *parser.AnimeShow) string {
-	if libraryDir == "" || show == nil || len(show.Files) == 0 {
-		return ""
-	}
-
-	targetSources := make(map[string]bool)
-	for i, f := range show.Files {
-		if i >= 5 {
-			break
-		}
-		if f.SourcePath == "" {
-			continue
-		}
-		targetSources[f.SourcePath] = true
-		if abs, err := filepath.Abs(f.SourcePath); err == nil {
-			targetSources[abs] = true
-		}
-	}
-
-	if len(targetSources) == 0 {
-		return ""
-	}
-
-	entries, err := os.ReadDir(libraryDir)
-	if err != nil {
-		return ""
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		folderPath := filepath.Join(libraryDir, entry.Name())
-		subEntries, err := os.ReadDir(folderPath)
-		if err != nil {
-			continue
-		}
-		for _, sub := range subEntries {
-			subPath := filepath.Join(folderPath, sub.Name())
-			if sub.IsDir() {
-				files, err := os.ReadDir(subPath)
-				if err != nil {
-					continue
-				}
-				for _, fi := range files {
-					linkPath := filepath.Join(subPath, fi.Name())
-					if target, err := os.Readlink(linkPath); err == nil {
-						if !filepath.IsAbs(target) {
-							target = filepath.Join(subPath, target)
-						}
-						targetAbs, _ := filepath.Abs(target)
-						if targetSources[target] || targetSources[targetAbs] {
-							return entry.Name()
-						}
-					}
-				}
-			} else {
-				if target, err := os.Readlink(subPath); err == nil {
-					if !filepath.IsAbs(target) {
-						target = filepath.Join(folderPath, target)
-					}
-					targetAbs, _ := filepath.Abs(target)
-					if targetSources[target] || targetSources[targetAbs] {
-						return entry.Name()
-					}
-				}
-			}
-		}
-	}
-	return ""
 }
 
 func containsCyrillic(s string) bool {
