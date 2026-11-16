@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 type FileType string
@@ -822,6 +823,12 @@ func ParseShowFolder(folderName string, relFiles []string, languageMapping map[s
 		if normFolder == "" {
 			show.CleanedName = bestCleanedName
 		} else if normFile != "" && strings.HasPrefix(normFolder, normFile) && len(normFile) < len(normFolder) {
+			show.CleanedName = bestCleanedName
+		} else if normFile != "" && strings.HasPrefix(normFile, normFolder) && len(normFile) > len(normFolder) &&
+			strings.ContainsFunc(normFile[len(normFolder):], unicode.IsLetter) &&
+			maxCount == len(tempFiles) && len(tempFiles) > 0 {
+			// Папка — сокращённое название ("Re Zero III"), а во всех файлах полное
+			// ("Re Zero kara Hajimeru Isekai Seikatsu III") — берём полное для точного поиска.
 			show.CleanedName = bestCleanedName
 		}
 	}
